@@ -1,0 +1,11 @@
+[package]
+name = "audio-thing"
+version = "0.1.0"
+authors = ["polyfloyd <floyd@polyfloyd.net>"]
+build = "build.rs"
+
+[dependencies]
+sample = "*"
+
+[build-dependencies]
+bindgen = "~0.20"
