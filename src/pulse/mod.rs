@@ -18,7 +18,14 @@ use self::pulse_error::pa_strerror;
 
 
 pub struct Source<F: sample::Frame> {
-    pub conn: Connection<F>,
+    conn: Connection<F>,
+}
+
+impl<F> Source<F>
+    where F: sample::Frame {
+    pub fn connection(&self) -> &Connection<F> {
+        &self.conn
+    }
 }
 
 impl<F> iter::Iterator for Source<F>
@@ -43,7 +50,7 @@ pub fn source<F, S>(app_name: &str, rate: u32) -> Result<Source<F>, Box<error::E
 }
 
 pub struct Sink<F: sample::Frame> {
-    pub conn: Connection<F>,
+    conn: io::BufWriter<Connection<F>>,
 }
 
 impl<F> Sink<F>
@@ -56,12 +63,16 @@ impl<F> Sink<F>
             Ok(())
         }
     }
+
+    pub fn connection(&self) -> &Connection<F> {
+        self.conn.get_ref()
+    }
 }
 
 impl<F> Drop for Sink<F>
     where F: sample::Frame {
     fn drop(&mut self) {
-        let _ = self.conn.drain();
+        let _ = self.conn.get_ref().drain();
     }
 }
 
@@ -69,7 +80,7 @@ pub fn sink<F, S>(app_name: &str, rate: u32) -> Result<Sink<F>, Box<error::Error
     where F: sample::Frame<Sample=S>,
           S: sample::Sample + AsSampleFormat {
     Connection::new(app_name, "sink", rate, pa_stream_direction::PA_STREAM_PLAYBACK)
-        .map(|c| Sink { conn: c })
+        .map(|c| Sink { conn: io::BufWriter::new(c) })
 }
 
 
