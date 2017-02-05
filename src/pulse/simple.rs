@@ -57,7 +57,7 @@ impl<F> Connection<F>
     pub fn drain(&self) -> Result<(), PulseError> {
         let mut err_code = pa_error_code::PA_OK;
         unsafe {
-            pa_simple_get_latency(self.conn, &mut err_code as *mut _ as *mut i32);
+            pa_simple_drain(self.conn, &mut err_code as *mut _ as *mut i32);
         }
         if err_code != pa_error_code::PA_OK {
             return Err(PulseError(err_code));
