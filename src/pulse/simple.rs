@@ -51,6 +51,32 @@ impl<F, S> Connection<F>
     }
 }
 
+impl<F> Connection<F>
+    where F: sample::Frame {
+    /// Blocks until all written samples have been played.
+    pub fn drain(&self) -> Result<(), PulseError> {
+        let mut err_code = pa_error_code::PA_OK;
+        unsafe {
+            pa_simple_get_latency(self.conn, &mut err_code as *mut _ as *mut i32);
+        }
+        if err_code != pa_error_code::PA_OK {
+            return Err(PulseError(err_code));
+        }
+        Ok(())
+    }
+
+    pub fn latency(&self) -> Result<time::Duration, PulseError> {
+        let mut err_code = pa_error_code::PA_OK;
+        let usecs = unsafe {
+            pa_simple_get_latency(self.conn, &mut err_code as *mut _ as *mut i32)
+        };
+        if err_code != pa_error_code::PA_OK {
+            return Err(PulseError(err_code));
+        }
+        Ok(time::Duration::new(usecs / 1_000_000_000, (usecs % 1_000_000_000) as u32))
+    }
+}
+
 impl<F> io::Read for Connection<F>
     where F: sample::Frame {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
@@ -67,6 +93,36 @@ impl<F> io::Read for Connection<F>
             return Err(io::Error::new(io::ErrorKind::Other, PulseError(err_code)));
         }
         Ok(buf.len())
+    }
+}
+
+impl<F> io::Write for Connection<F>
+    where F: sample::Frame {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        let mut err_code = pa_error_code::PA_OK;
+        unsafe {
+            pa_simple_write(
+                self.conn,
+                buf.as_ptr() as _,
+                buf.len(),
+                &mut err_code as *mut _ as *mut i32,
+            );
+        }
+        if err_code != pa_error_code::PA_OK {
+            return Err(io::Error::new(io::ErrorKind::Other, PulseError(err_code)));
+        }
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        let mut err_code = pa_error_code::PA_OK;
+        unsafe {
+            pa_simple_flush(self.conn, &mut err_code as *mut _ as *mut i32);
+        }
+        if err_code != pa_error_code::PA_OK {
+            return Err(io::Error::new(io::ErrorKind::Other, PulseError(err_code)));
+        }
+        Ok(())
     }
 }
 

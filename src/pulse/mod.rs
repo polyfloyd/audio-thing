@@ -1,5 +1,5 @@
 use std::*;
-use std::io::Read;
+use std::io::{Read, Write};
 use sample;
 
 mod simple;
@@ -18,7 +18,7 @@ use self::pulse_error::pa_strerror;
 
 
 pub struct Source<F: sample::Frame> {
-    conn: Connection<F>,
+    pub conn: Connection<F>,
 }
 
 impl<F> iter::Iterator for Source<F>
@@ -40,6 +40,36 @@ pub fn source<F, S>(app_name: &str, rate: u32) -> Result<Source<F>, Box<error::E
           S: sample::Sample + AsSampleFormat {
     Connection::new(app_name, "source", rate, pa_stream_direction::PA_STREAM_RECORD)
         .map(|c| Source { conn: c })
+}
+
+pub struct Sink<F: sample::Frame> {
+    pub conn: Connection<F>,
+}
+
+impl<F> Sink<F>
+    where F: sample::Frame {
+    pub fn write_frame(&mut self, frame: &F) -> io::Result<()>{
+        unsafe {
+            debug_assert_eq!(mem::size_of::<F>(), F::n_channels() * mem::size_of::<F::Sample>());
+            let buf = slice::from_raw_parts(mem::transmute::<&F, *const u8>(frame), mem::size_of::<F>());
+            try!(self.conn.write(buf));
+            Ok(())
+        }
+    }
+}
+
+impl<F> Drop for Sink<F>
+    where F: sample::Frame {
+    fn drop(&mut self) {
+        let _ = self.conn.drain();
+    }
+}
+
+pub fn sink<F, S>(app_name: &str, rate: u32) -> Result<Sink<F>, Box<error::Error>>
+    where F: sample::Frame<Sample=S>,
+          S: sample::Sample + AsSampleFormat {
+    Connection::new(app_name, "sink", rate, pa_stream_direction::PA_STREAM_PLAYBACK)
+        .map(|c| Sink { conn: c })
 }
 
 
