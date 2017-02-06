@@ -1,3 +1,4 @@
+extern crate flac;
 extern crate sample;
 
 mod pulse;

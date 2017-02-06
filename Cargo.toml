@@ -5,6 +5,7 @@ authors = ["polyfloyd <floyd@polyfloyd.net>"]
 build = "build.rs"
 
 [dependencies]
+flac = "*"
 sample = "*"
 
 [build-dependencies]
