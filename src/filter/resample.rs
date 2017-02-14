@@ -1,6 +1,6 @@
 use std::*;
-use std::sync::mpsc;
 use sample;
+use ::audio;
 
 mod swresample {
     #![allow(dead_code, non_snake_case, non_camel_case_types, non_upper_case_globals, improper_ctypes)]
@@ -17,40 +17,6 @@ pub struct Resampler<O, I, S>
     input: S,
     output_rate: i64,
     input_rate: i64,
-}
-
-impl<O, I, S> Resampler<O, I, S>
-    where O: sample::Frame,
-          I: sample::Frame,
-          S: sample::Signal<Item=I>,
-          O::Sample: AsSampleFormat,
-          I::Sample: AsSampleFormat,
-          O::NumChannels: AsChannelLayout,
-          I::NumChannels: AsChannelLayout {
-    pub fn new(output_rate: u32, input_rate: u32, input: S) -> Resampler<O, I, S> {
-        let swr = unsafe {
-            let swr = swr_alloc_set_opts(
-                ptr::null_mut(),                         // we're allocating a new context
-                O::NumChannels::channel_layout() as i64, // out_ch_layout
-                O::Sample::sample_format(),              // out_sample_fmt
-                output_rate as i32,                      // out_sample_rate
-                I::NumChannels::channel_layout() as i64, // in_ch_layout
-                I::Sample::sample_format(),              // in_sample_fmt
-                input_rate as i32,                       // in_sample_rate
-                0,                                       // log_offset
-                ptr::null_mut(),                         // log_ctx
-            );
-            swr_init(swr);
-            swr
-        };
-        Resampler {
-            swr: swr,
-            output: collections::VecDeque::new(),
-            input: input,
-            output_rate: output_rate as i64,
-            input_rate: input_rate as i64,
-        }
-    }
 }
 
 impl<O, I, S> iter::Iterator for Resampler<O, I, S>
@@ -105,6 +71,19 @@ impl<O, I, S> iter::Iterator for Resampler<O, I, S>
     }
 }
 
+impl<O, I, S> audio::Source<O> for Resampler<O, I, S>
+    where O: sample::Frame,
+          I: sample::Frame,
+          S: sample::Signal<Item=I>,
+          O::Sample: AsSampleFormat,
+          I::Sample: AsSampleFormat,
+          O::NumChannels: AsChannelLayout,
+          I::NumChannels: AsChannelLayout {
+    fn sample_rate(&self) -> u32 {
+        self.output_rate as u32
+    }
+}
+
 impl<O, I, S> Drop for Resampler<O, I, S>
     where O: sample::Frame,
           I: sample::Frame,
@@ -156,3 +135,47 @@ impl AsChannelLayout for sample::frame::N1 {
 impl AsChannelLayout for sample::frame::N2 {
     fn channel_layout() -> u32 { AV_CH_LAYOUT_STEREO }
 }
+
+
+pub trait Resample<O, I>: audio::Source<I> + Sized
+    where O: sample::Frame,
+          I: sample::Frame,
+          O::Sample: AsSampleFormat,
+          I::Sample: AsSampleFormat,
+          O::NumChannels: AsChannelLayout,
+          I::NumChannels: AsChannelLayout {
+    fn resample(self, output_rate: u32) -> Resampler<O, I, Self> {
+        let input_rate = self.sample_rate();
+        let swr = unsafe {
+            let swr = swr_alloc_set_opts(
+                ptr::null_mut(),                         // we're allocating a new context
+                O::NumChannels::channel_layout() as i64, // out_ch_layout
+                O::Sample::sample_format(),              // out_sample_fmt
+                output_rate as i32,                      // out_sample_rate
+                I::NumChannels::channel_layout() as i64, // in_ch_layout
+                I::Sample::sample_format(),              // in_sample_fmt
+                input_rate as i32,                       // in_sample_rate
+                0,                                       // log_offset
+                ptr::null_mut(),                         // log_ctx
+            );
+            swr_init(swr);
+            swr
+        };
+        Resampler {
+            swr: swr,
+            output: collections::VecDeque::new(),
+            input: self,
+            output_rate: output_rate as i64,
+            input_rate: input_rate as i64,
+        }
+    }
+}
+
+impl<T, O, I> Resample<O, I> for T
+    where T: audio::Source<I>,
+          O: sample::Frame,
+          I: sample::Frame,
+          O::Sample: AsSampleFormat,
+          I::Sample: AsSampleFormat,
+          O::NumChannels: AsChannelLayout,
+          I::NumChannels: AsChannelLayout { }

@@ -1,6 +1,7 @@
 use std::*;
 use flac;
 use sample::Sample;
+use ::audio;
 
 pub struct Decoder<R: io::Read> {
     iter: flac::stream::Iter<flac::ReadStream<R>, <i16 as flac::SampleSize>::Extended, flac::Stream<flac::ReadStream<R>>>,
@@ -17,10 +18,6 @@ impl<R> Decoder<R>
             iter: iter,
             info: info,
         })
-    }
-
-    pub fn sample_rate(&self) -> u32 {
-        self.info.sample_rate
     }
 }
 
@@ -43,5 +40,12 @@ impl<R> iter::Iterator for Decoder<R>
             _ => unimplemented!(),
         };
         Some(out_frame)
+    }
+}
+
+impl<R> audio::Source<[i16; 2]> for Decoder<R>
+    where R: io::Read {
+    fn sample_rate(&self) -> u32 {
+        self.info.sample_rate
     }
 }

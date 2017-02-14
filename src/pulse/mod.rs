@@ -1,16 +1,17 @@
 use std::*;
 use std::io::{Read, Write};
 use sample;
+use ::audio;
 
 mod simple;
 use self::simple::*;
 
 mod pulse_simple {
-    #![allow(dead_code, non_camel_case_types, non_upper_case_globals, improper_ctypes)]
+    #![allow(dead_code, non_snake_case, non_camel_case_types, non_upper_case_globals, improper_ctypes)]
     include!(concat!(env!("OUT_DIR"), "/pulse-simple.rs"));
 }
 mod pulse_error {
-    #![allow(dead_code, non_camel_case_types, non_upper_case_globals, improper_ctypes)]
+    #![allow(dead_code, non_snake_case, non_camel_case_types, non_upper_case_globals, improper_ctypes)]
     include!(concat!(env!("OUT_DIR"), "/pulse-error.rs"));
 }
 use self::pulse_simple::*;
@@ -19,6 +20,7 @@ use self::pulse_error::pa_strerror;
 
 pub struct Source<F: sample::Frame> {
     conn: Connection<F>,
+    rate: u32,
 }
 
 impl<F> Source<F>
@@ -42,30 +44,45 @@ impl<F> iter::Iterator for Source<F>
     }
 }
 
+impl<F> audio::Source<F> for Source<F>
+    where F: sample::Frame {
+    fn sample_rate(&self) -> u32 {
+        self.rate
+    }
+}
+
 pub fn source<F, S>(app_name: &str, rate: u32) -> Result<Source<F>, Box<error::Error>>
     where F: sample::Frame<Sample=S>,
           S: sample::Sample + AsSampleFormat {
     Connection::new(app_name, "source", rate, pa_stream_direction::PA_STREAM_RECORD)
-        .map(|c| Source { conn: c })
+        .map(|c| Source { conn: c, rate: rate })
 }
 
 pub struct Sink<F: sample::Frame> {
     conn: io::BufWriter<Connection<F>>,
+    rate: u32,
 }
 
 impl<F> Sink<F>
     where F: sample::Frame {
-    pub fn write_frame(&mut self, frame: &F) -> io::Result<()>{
+    pub fn connection(&self) -> &Connection<F> {
+        self.conn.get_ref()
+    }
+}
+
+impl<F> audio::Sink<F> for Sink<F>
+    where F: sample::Frame {
+    fn write_frame(&mut self, frame: F) -> Result<(), Box<error::Error>> {
         unsafe {
             debug_assert_eq!(mem::size_of::<F>(), F::n_channels() * mem::size_of::<F::Sample>());
-            let buf = slice::from_raw_parts(mem::transmute::<&F, *const u8>(frame), mem::size_of::<F>());
+            let buf = slice::from_raw_parts(mem::transmute::<&F, *const u8>(&frame), mem::size_of::<F>());
             try!(self.conn.write(buf));
             Ok(())
         }
     }
 
-    pub fn connection(&self) -> &Connection<F> {
-        self.conn.get_ref()
+    fn sample_rate(&self) -> u32 {
+        self.rate
     }
 }
 
@@ -80,7 +97,7 @@ pub fn sink<F, S>(app_name: &str, rate: u32) -> Result<Sink<F>, Box<error::Error
     where F: sample::Frame<Sample=S>,
           S: sample::Sample + AsSampleFormat {
     Connection::new(app_name, "sink", rate, pa_stream_direction::PA_STREAM_PLAYBACK)
-        .map(|c| Sink { conn: io::BufWriter::new(c) })
+        .map(|c| Sink { conn: io::BufWriter::new(c), rate: rate })
 }
 
 
