@@ -43,7 +43,7 @@ impl<R> iter::Iterator for Decoder<R>
     }
 }
 
-impl<R> audio::Source<[i16; 2]> for Decoder<R>
+impl<R> audio::Source for Decoder<R>
     where R: io::Read {
     fn sample_rate(&self) -> u32 {
         self.info.sample_rate

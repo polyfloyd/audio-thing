@@ -71,7 +71,7 @@ impl<O, I, S> iter::Iterator for Resampler<O, I, S>
     }
 }
 
-impl<O, I, S> audio::Source<O> for Resampler<O, I, S>
+impl<O, I, S> audio::Source for Resampler<O, I, S>
     where O: sample::Frame,
           I: sample::Frame,
           S: sample::Signal<Item=I>,
@@ -137,7 +137,7 @@ impl AsChannelLayout for sample::frame::N2 {
 }
 
 
-pub trait Resample<O, I>: audio::Source<I> + Sized
+pub trait Resample<O, I>: audio::Source<Item=I> + Sized
     where O: sample::Frame,
           I: sample::Frame,
           O::Sample: AsSampleFormat,
@@ -172,7 +172,7 @@ pub trait Resample<O, I>: audio::Source<I> + Sized
 }
 
 impl<T, O, I> Resample<O, I> for T
-    where T: audio::Source<I>,
+    where T: audio::Source<Item=I>,
           O: sample::Frame,
           I: sample::Frame,
           O::Sample: AsSampleFormat,

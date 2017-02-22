@@ -44,7 +44,7 @@ impl<F> iter::Iterator for Source<F>
     }
 }
 
-impl<F> audio::Source<F> for Source<F>
+impl<F> audio::Source for Source<F>
     where F: sample::Frame {
     fn sample_rate(&self) -> u32 {
         self.rate
