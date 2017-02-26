@@ -1,4 +1,6 @@
+extern crate dft;
 extern crate flac;
+extern crate num_complex;
 extern crate sample;
 use std::*;
 use ::audio::{Sink, Source};
