@@ -6,17 +6,9 @@
 use std::*;
 use dft;
 use sample::{self, Frame, Sample};
-use num_complex::Complex;
 use ::audio;
 
-fn window_scalars(window_size: usize) -> Vec<f64> {
-    // TODO: Using a sine is not sufficient for an overlap which is not half the window size!
-    (0..window_size).map(|n| {
-        f64::sin(f64::consts::PI / window_size as f64 * (n as f64 + 0.5))
-    }).collect()
-}
-
-pub trait Stft: iter::Iterator<Item=Vec<Vec<Complex<f64>>>> + Sized {
+pub trait Stft: iter::Iterator<Item=Vec<Vec<f64>>> + Sized {
     type NumChannels: sample::frame::NumChannels;
     fn sample_rate(&self) -> u32;
     fn window_size(&self) -> usize;
@@ -31,8 +23,8 @@ pub trait Stft: iter::Iterator<Item=Vec<Vec<Complex<f64>>>> + Sized {
             collections::VecDeque::new(),
             vec![O::Float::equilibrium(); window_size].into_iter().collect(),
         ];
-        let window_scalars = window_scalars(window_size).into_iter()
-            .map(|s| s.powi(2))
+        let window_scalars = (0..window_size)
+            .map(|n| f64::sin(f64::consts::PI / window_size as f64 * (n as f64 + 0.5)).powi(2))
             .collect();
         Inverse {
             stft: self,
@@ -72,11 +64,11 @@ impl<T, O> iter::Iterator for Inverse<T, O>
                 dft::transform(block, &self.fft_plan);
             }
             assert_eq!(O::n_channels(), blocks.len());
-            debug_assert!(blocks.iter().all(|block| block.len() == self.stft.window_size()));
+            assert!(blocks.iter().all(|block| block.len() == self.stft.window_size()));
 
             let next_window = (0..self.stft.window_size())
                 .map(|n| O::Float::from_fn(|ch| {
-                    <O::Sample as sample::Sample>::Float::from_sample(blocks[ch][n].re)
+                    <O::Sample as sample::Sample>::Float::from_sample(blocks[ch][n])
                 }))
                 .collect();
             self.windows.push_back(next_window);
@@ -86,15 +78,18 @@ impl<T, O> iter::Iterator for Inverse<T, O>
                 .drain(0..self.stft.window_size() - self.stft.window_overlap());
         }
 
-        let n = self.stft.window_overlap() - self.windows.front().unwrap().len();
-        let sa = self.window_scalars[n + self.stft.window_overlap()];
+        let (mut front, back) = {
+            let mut w = self.windows.iter_mut();
+            (w.next().unwrap(), w.next().unwrap())
+        };
+        let n = self.stft.window_overlap() - front.len();
         let sb = self.window_scalars[n];
+        let sa = self.window_scalars[n + self.stft.window_overlap()];
         // The sum of sa and sb should be equal to 1.0.
-        debug_assert!(1.0-10e-9 <= sa+sb && sa+sb <= 1.0+10e-9);
+        assert!(1.0-10e-9 <= sa+sb && sa+sb <= 1.0+10e-9);
 
-        let fa = self.windows.front_mut().unwrap().pop_front().unwrap();
-        let fb = self.windows.back().unwrap()[n];
-
+        let fa = front.pop_front().unwrap();
+        let fb = back[n];
         Some(fa.zip_map(fb, |a, b| O::Sample::from_sample(a * sa.to_sample() + b * sb.to_sample())))
     }
 }
@@ -120,7 +115,6 @@ pub struct FromSource<S>
     fft_plan: dft::Plan<f64>,
     /// Stores the previous window.
     window: collections::VecDeque<S::Item>,
-    window_scalars: Vec<f64>,
 }
 
 impl<S> Stft for FromSource<S>
@@ -145,7 +139,7 @@ impl<S> iter::Iterator for FromSource<S>
     where S: audio::Source,
           S::Item: sample::Frame,
           <S::Item as sample::Frame>::Sample: sample::ToSample<f64> {
-    type Item = Vec<Vec<Complex<f64>>>;
+    type Item = Vec<Vec<f64>>;
     fn next(&mut self) -> Option<Self::Item> {
         assert_eq!(self.window_size, self.window.len());
         for i in 0..(self.window_size - self.overlap) {
@@ -161,11 +155,9 @@ impl<S> iter::Iterator for FromSource<S>
 
         let blocks: Vec<_> = (0..S::Item::n_channels())
             .map(|ch| {
-                let mut block: Vec<_> = self.window.iter().zip(self.window_scalars.iter())
-                    .map(|(frame, scalar)| {
-                        let sample: f64 = frame.channel(ch).unwrap().to_sample();
-                        Complex::new(sample * scalar, 0.0)
-                    }).collect();
+                let mut block: Vec<_> = self.window.iter()
+                    .map(|frame| frame.channel(ch).unwrap().to_sample())
+                    .collect();
                 dft::transform(&mut block, &self.fft_plan);
                 block
             })
@@ -189,10 +181,9 @@ pub trait IntoStft: audio::Source + Sized
         FromSource {
             input: self,
             window_size: window_size,
-            overlap: window_size / 2, // TODO: See the window_scalars function.
+            overlap: window_size / 2, // TODO
             fft_plan: dft::Plan::new(dft::Operation::Forward, window_size),
             window: window,
-            window_scalars: window_scalars(window_size),
         }
     }
 }
