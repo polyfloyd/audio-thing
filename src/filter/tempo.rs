@@ -17,33 +17,21 @@ impl<S> iter::Iterator for PhaseVocoder<S>
         assert!(0.0 <= self.consumption && self.consumption < 1.0);
 
         // The ratio is also the number of blocks that we should use.
-        let num_blocks = (self.consumption + self.ratio).ceil() as usize;
-        assert!(num_blocks >= 1);
+        let next_consumption = self.consumption + self.ratio;
 
-        self.accum.extend(self.input.by_ref().take(self.ratio.ceil() as usize));
-        let num_blocks_available = cmp::min(num_blocks, self.accum.len());
-        if num_blocks_available == 0 {
+        self.accum.extend(self.input.by_ref().take(next_consumption.floor() as usize));
+
+        let block_index = (next_consumption / 2.0).floor() as usize;
+        if block_index >= self.accum.len() {
+            assert_eq!(None, self.input.next());
             return None;
         }
-
-        let num_channels = self.accum[0].len();
-        let output_block = self.accum.iter()
-            .take(num_blocks_available)
-            .fold(vec![vec![0.0; self.input.window_size()]; num_channels], |mut sum, block| {
-                let avg = 1.0 / num_blocks_available as f64;
-                for (ch, channel) in block.into_iter().enumerate() {
-                    for (i, bin_half) in channel.into_iter().enumerate() {
-                        // TODO: Better interpolation between blocks.
-                        sum[ch][i] += bin_half * avg;
-                    }
-                }
-                sum
-            });
+        let output_block = self.accum[block_index].clone();
 
         // Remove the blocks that have been fully consumed.
-        self.consumption = self.consumption + self.ratio;
-        self.accum.drain(0..self.consumption.floor() as usize);
-        self.consumption %= 1.0;
+        let num_blocks_available = self.accum.len();
+        self.accum.drain(0..cmp::min(next_consumption.floor() as usize, num_blocks_available));
+        self.consumption = next_consumption % 1.0;
 
         Some(output_block)
     }
