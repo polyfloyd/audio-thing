@@ -3,8 +3,9 @@ use ::filter::stft;
 
 pub struct PhaseVocoder<S>
     where S: stft::Stft {
+    pub ratio: sync::Arc<sync::Mutex<f64>>,
+
     input: S,
-    ratio: f64,
     // Stores how much of the accum[0] has been consumed in previous iterations.
     consumption: f64,
     accum: collections::VecDeque<Vec<Vec<f64>>>,
@@ -16,10 +17,13 @@ impl<S> iter::Iterator for PhaseVocoder<S>
     fn next(&mut self) -> Option<Self::Item> {
         assert!(0.0 <= self.consumption && self.consumption < 1.0);
 
-        // The ratio is also the number of blocks that we should use.
-        let next_consumption = self.consumption + self.ratio;
+        let ratio = self.ratio.lock().unwrap();
+        assert!(*ratio > 0.0);
 
-        self.accum.extend(self.input.by_ref().take(next_consumption.floor() as usize));
+        // The ratio is also the number of blocks that we should use.
+        let next_consumption = self.consumption + *ratio;
+
+        self.accum.extend(self.input.by_ref().take(next_consumption.ceil() as usize));
 
         let block_index = (next_consumption / 2.0).floor() as usize;
         if block_index >= self.accum.len() {
@@ -54,11 +58,11 @@ impl<S> stft::Stft for PhaseVocoder<S>
 }
 
 pub trait AdjustTempo: stft::Stft + Sized {
-    fn adjust_tempo(self, ratio: f64) -> PhaseVocoder<Self> {
-        assert!(ratio > 0.0);
+    fn adjust_tempo(self, initial_ratio: f64) -> PhaseVocoder<Self> {
+        assert!(initial_ratio > 0.0);
         PhaseVocoder {
             input: self,
-            ratio: ratio,
+            ratio: sync::Arc::new(sync::Mutex::new(initial_ratio)),
             consumption: 0.0,
             accum: collections::VecDeque::new(),
         }
