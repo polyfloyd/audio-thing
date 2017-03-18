@@ -58,11 +58,11 @@ impl<S> stft::Stft for PhaseVocoder<S>
 }
 
 pub trait AdjustTempo: stft::Stft + Sized {
-    fn adjust_tempo(self, initial_ratio: f64) -> PhaseVocoder<Self> {
-        assert!(initial_ratio > 0.0);
+    fn adjust_tempo(self, ratio: sync::Arc<sync::Mutex<f64>>) -> PhaseVocoder<Self> {
+        assert!(*ratio.lock().unwrap() > 0.0);
         PhaseVocoder {
             input: self,
-            ratio: sync::Arc::new(sync::Mutex::new(initial_ratio)),
+            ratio: ratio,
             consumption: 0.0,
             accum: collections::VecDeque::new(),
         }
