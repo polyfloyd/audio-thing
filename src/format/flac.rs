@@ -49,3 +49,21 @@ impl<R> audio::Source for Decoder<R>
         self.info.sample_rate
     }
 }
+
+impl<R> audio::Seekable for Decoder<R>
+    where R: io::Read {
+    fn seek(&mut self, pos: io::SeekFrom) -> Result<(), Box<error::Error>> {
+        unimplemented!();
+    }
+
+    fn length(&self) -> u64 {
+        unimplemented!();
+    }
+
+    fn position(&self) -> u64 {
+        unimplemented!();
+    }
+}
+
+impl<R> audio::Seek for Decoder<R>
+    where R: io::Read { }

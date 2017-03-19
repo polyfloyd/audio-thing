@@ -6,7 +6,7 @@ use ::filter::*;
 use ::player::output;
 
 
-#[derive(PartialEq, Eq, Copy, Clone)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum State {
     Playing,
     Paused,
@@ -15,7 +15,8 @@ pub enum State {
 
 
 pub struct Playback {
-    stream: Box<output::Stream>,
+    pub stream: Box<output::Stream>,
+
     flow_state: Arc<(Condvar, Mutex<State>)>,
     sample_counter: Arc<Mutex<u64>>,
 
