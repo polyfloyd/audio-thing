@@ -3,8 +3,8 @@ use std::io::{Read, Write};
 use sample;
 use ::audio;
 
-mod simple;
-use self::simple::*;
+pub mod simple;
+pub use self::simple::*;
 
 mod pulse_simple {
     #![allow(dead_code, non_snake_case, non_camel_case_types, non_upper_case_globals, improper_ctypes)]
@@ -93,10 +93,10 @@ impl<F> Drop for Sink<F>
     }
 }
 
-pub fn sink<F, S>(app_name: &str, rate: u32) -> Result<Sink<F>, Box<error::Error>>
-    where F: sample::Frame<Sample=S>,
-          S: sample::Sample + AsSampleFormat {
-    Connection::new(app_name, "sink", rate, pa_stream_direction::PA_STREAM_PLAYBACK)
+pub fn sink<F>(app_name: &str, stream_name: &str, rate: u32) -> Result<Sink<F>, Box<error::Error>>
+    where F: sample::Frame,
+          F::Sample: sample::Sample + AsSampleFormat {
+    Connection::new(app_name, stream_name, rate, pa_stream_direction::PA_STREAM_PLAYBACK)
         .map(|c| Sink { conn: io::BufWriter::new(c), rate: rate })
 }
 

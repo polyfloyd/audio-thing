@@ -3,9 +3,9 @@ use super::*;
 use sample;
 
 
-fn sample_spec<F, S>(rate: u32) -> pa_sample_spec
-    where F: sample::Frame<Sample=S>,
-          S: sample::Sample + AsSampleFormat {
+fn sample_spec<F>(rate: u32) -> pa_sample_spec
+    where F: sample::Frame,
+          F::Sample: sample::Sample + AsSampleFormat {
     assert!(F::n_channels() <= u8::MAX as usize);
     pa_sample_spec {
         format:   F::Sample::sample_format(),
@@ -14,14 +14,15 @@ fn sample_spec<F, S>(rate: u32) -> pa_sample_spec
     }
 }
 
-pub struct Connection<F: sample::Frame> {
+pub struct Connection<F>
+    where F: sample::Frame {
     conn: *mut pa_simple,
     phantom: marker::PhantomData<F>,
 }
 
-impl<F, S> Connection<F>
-    where F: sample::Frame<Sample=S>,
-          S: sample::Sample + AsSampleFormat {
+impl<F> Connection<F>
+    where F: sample::Frame,
+          F::Sample: sample::Sample + AsSampleFormat {
     pub fn new(app_name: &str, stream_name: &str, rate: u32, dir: pa_stream_direction) -> Result<Connection<F>, Box<error::Error>> {
         let s = unsafe {
             let c_app_name    = try!(ffi::CString::new(app_name));
@@ -33,7 +34,7 @@ impl<F, S> Connection<F>
                 dir,
                 ptr::null(),                           // Use the default device.
                 c_stream_name.as_ptr(),
-                &sample_spec::<F, F::Sample>(rate),
+                &sample_spec::<F>(rate),
                 ptr::null(),                           // Use default channel map
                 ptr::null(),                           // Use default buffering attributes.
                 &mut err_code as *mut _ as *mut i32,
@@ -129,9 +130,14 @@ impl<F> io::Write for Connection<F>
 impl<F> Drop for Connection<F>
     where F: sample::Frame {
     fn drop(&mut self) {
+        let _ = self.drain();
         unsafe { pa_simple_free(self.conn); }
     }
 }
+
+// Should be ok according to Pulse's documentation.
+unsafe impl<F> Send for Connection<F>
+    where F: sample::Frame { }
 
 
 pub trait AsSampleFormat {

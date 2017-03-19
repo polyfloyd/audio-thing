@@ -1,6 +1,6 @@
 use std::*;
 use std::sync::{Arc, Condvar, Mutex};
-use sample::{self, Frame};
+use sample;
 use ::audio::*;
 use ::filter::*;
 use ::player::output;
