@@ -6,19 +6,13 @@ use std::path::Path;
 fn main() {
     let out_dir = env::var("OUT_DIR").unwrap();
     bindgen::builder()
-        .header("/usr/include/pulse/simple.h")
+        .header("header/pulse.h")
         .no_unstable_rust()
         .derive_debug(true)
         .generate().unwrap()
-        .write_to_file(Path::new(&out_dir).join("pulse-simple.rs")).unwrap();
-    bindgen::builder()
-        .header("/usr/include/pulse/error.h")
-        .no_unstable_rust()
-        .derive_debug(true)
-        .generate().unwrap()
-        .write_to_file(Path::new(&out_dir).join("pulse-error.rs")).unwrap();
-    println!("cargo:rustc-link-lib=pulse-simple");
+        .write_to_file(Path::new(&out_dir).join("pulse.rs")).unwrap();
     println!("cargo:rustc-link-lib=pulse");
+    println!("cargo:rustc-link-lib=pulse-simple");
 
     bindgen::builder()
         .header("/usr/include/x86_64-linux-gnu/libswresample/swresample.h")

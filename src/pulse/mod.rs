@@ -6,16 +6,11 @@ use ::audio;
 pub mod simple;
 pub use self::simple::*;
 
-mod pulse_simple {
+mod pulse {
     #![allow(dead_code, non_snake_case, non_camel_case_types, non_upper_case_globals, improper_ctypes)]
-    include!(concat!(env!("OUT_DIR"), "/pulse-simple.rs"));
+    include!(concat!(env!("OUT_DIR"), "/pulse.rs"));
 }
-mod pulse_error {
-    #![allow(dead_code, non_snake_case, non_camel_case_types, non_upper_case_globals, improper_ctypes)]
-    include!(concat!(env!("OUT_DIR"), "/pulse-error.rs"));
-}
-use self::pulse_simple::*;
-use self::pulse_error::pa_strerror;
+use self::pulse::*;
 
 
 pub struct Source<F: sample::Frame> {
