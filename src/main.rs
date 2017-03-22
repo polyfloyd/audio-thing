@@ -27,9 +27,13 @@ fn main() {
             "ps" => pb.set_playstate(player::State::Paused),
             "pl" => pb.set_playstate(player::State::Playing),
             "st" => {
-                println!("state: {:?}", pb.playstate());
-                println!("tempo: {}", pb.tempo());
-                println!("latency: {:?}", pb.stream.latency().unwrap());
+                let duration = pb.duration_time()
+                    .map(|d| format!("{:?}", d))
+                    .unwrap_or("∞".to_string());
+                println!("state:    {:?}", pb.playstate());
+                println!("position: {:?}/{}", pb.position_time(), duration);
+                println!("tempo:    {}", pb.tempo());
+                println!("latency:  {:?}", pb.stream.latency().unwrap());
             },
             l => {
                 if let Ok(r) = l.parse() {

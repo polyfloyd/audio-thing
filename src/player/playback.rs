@@ -17,6 +17,7 @@ pub enum State {
 pub struct Playback {
     pub stream: Box<output::Stream>,
 
+    sample_rate: u32,
     flow_state: Arc<(Condvar, Mutex<State>)>,
     sample_counter: Arc<Mutex<u64>>,
 
@@ -71,6 +72,7 @@ impl Playback {
         };
 
         Playback {
+            sample_rate: source_out.sample_rate(),
             stream: output.consume(source_out).unwrap(),
             flow_state: flow_state,
             sample_counter: sample_counter,
@@ -187,6 +189,7 @@ impl Playback {
         };
 
         Playback {
+            sample_rate: source_out.sample_rate(),
             stream: output.consume(source_out).unwrap(),
             flow_state: flow_state,
             sample_counter: sample_counter,
@@ -202,13 +205,28 @@ impl Playback {
             .map(|s| (*s.lock().unwrap()).length())
     }
 
+    /// Returns the duration as a Duration if known.
+    pub fn duration_time(&self) -> Option<time::Duration> {
+        self.duration()
+            .map(|num_samples| {
+                let secs = num_samples as f64 / self.sample_rate as f64;
+                time::Duration::new(secs.floor() as u64, (secs.fract() * 1_000_000_000.0) as u32)
+            })
+    }
+
     /// Returns the position of the sample that will be read next.
     /// If The audio is infinite, this will simply be the total number of samples played.
     pub fn position(&self) -> u64 {
         self.seek
             .as_ref()
-            .map(|s| s.lock().unwrap().position() )
-            .unwrap_or(*self.sample_counter.lock().unwrap())
+            .map(|s| s.lock().unwrap().position())
+            .unwrap_or_else(|| *self.sample_counter.lock().unwrap())
+    }
+
+    /// Returns the current position as a Duration.
+    pub fn position_time(&self) -> time::Duration {
+        let secs = self.position() as f64 / self.sample_rate as f64;
+        time::Duration::new(secs.floor() as u64, (secs.fract() * 1_000_000_000.0) as u32)
     }
 
     pub fn playstate(&self) -> State {

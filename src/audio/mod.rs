@@ -29,10 +29,6 @@ pub trait Seekable {
 /// random access.
 pub trait Seek: Source + Seekable
     where Self::Item: sample::Frame {
-    /// Calculates the total duration of the signal based on the sample rate and number of samples.
-    fn duration(&self) -> time::Duration {
-        time::Duration::new(self.length() / self.sample_rate() as u64, 0)
-    }
 }
 
 pub trait Sink<F>
