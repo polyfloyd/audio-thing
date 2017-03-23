@@ -22,4 +22,12 @@ fn main() {
         .write_to_file(Path::new(&out_dir).join("swresample.rs")).unwrap();
     println!("cargo:rustc-link-lib=swresample");
     println!("cargo:rustc-link-lib=avutil");
+
+    bindgen::builder()
+        .header("/usr/include/FLAC/all.h")
+        .no_unstable_rust()
+        .derive_debug(true)
+        .generate().unwrap()
+        .write_to_file(Path::new(&out_dir).join("libflac.rs")).unwrap();
+    println!("cargo:rustc-link-lib=FLAC");
 }

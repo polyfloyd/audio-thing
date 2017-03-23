@@ -22,7 +22,7 @@ pub trait Seekable {
     /// Returns the total number of frames in the stream.
     fn length(&self) -> u64;
     /// Retrieves the index of the frame that will be read next.
-    fn position(&self) -> u64;
+    fn current_position(&self) -> u64;
 }
 
 /// When a Source has a known finite number of frames, it may implement the Seek trait to allow
@@ -111,8 +111,8 @@ impl<S> Seekable for Shared<S>
         self.input.lock().unwrap().length()
     }
 
-    fn position(&self) -> u64 {
-        self.input.lock().unwrap().position()
+    fn current_position(&self) -> u64 {
+        self.input.lock().unwrap().current_position()
     }
 }
 
@@ -146,8 +146,8 @@ impl<T> Seekable for Box<T>
         self.deref().length()
     }
 
-    fn position(&self) -> u64 {
-        self.deref().position()
+    fn current_position(&self) -> u64 {
+        self.deref().current_position()
     }
 }
 

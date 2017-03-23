@@ -22,7 +22,7 @@ pub struct Playback {
     sample_counter: Arc<Mutex<u64>>,
 
     tempo: Option<Arc<Mutex<f64>>>,
-    seek: Option<Arc<Mutex<Seekable>>>,
+    seekable: Option<Arc<Mutex<Seekable>>>,
 }
 
 pub fn play(audio: dyn::Audio, output: Arc<output::Output>) -> Playback {
@@ -77,7 +77,7 @@ impl Playback {
             flow_state: flow_state,
             sample_counter: sample_counter,
             tempo: None,
-            seek: None,
+            seekable: None,
         }
     }
 
@@ -194,13 +194,13 @@ impl Playback {
             flow_state: flow_state,
             sample_counter: sample_counter,
             tempo: Some(tempo),
-            seek: Some(mut_seek),
+            seekable: Some(mut_seek),
         }
     }
 
     /// Returns the total number of samples in of the playing audio if known.
     pub fn duration(&self) -> Option<u64> {
-        self.seek
+        self.seekable
             .as_ref()
             .map(|s| (*s.lock().unwrap()).length())
     }
@@ -217,10 +217,21 @@ impl Playback {
     /// Returns the position of the sample that will be read next.
     /// If The audio is infinite, this will simply be the total number of samples played.
     pub fn position(&self) -> u64 {
-        self.seek
+        self.seekable
             .as_ref()
-            .map(|s| s.lock().unwrap().position())
+            .map(|s| s.lock().unwrap().current_position())
             .unwrap_or_else(|| *self.sample_counter.lock().unwrap())
+    }
+
+    pub fn seek(&self, position: u64) {
+        self.seekable
+            .as_ref()
+            .map(|s| s.lock().unwrap().seek(io::SeekFrom::Start(position)));
+    }
+
+    pub fn seek_time(&self, timestamp: time::Duration) {
+        let secs = timestamp.as_secs() * self.sample_rate as u64;
+        self.seek(secs);
     }
 
     /// Returns the current position as a Duration.
