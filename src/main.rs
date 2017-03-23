@@ -13,7 +13,7 @@ fn main() {
     let filename = env::args().nth(1)
         .expect("$1 should be an audio file");
 
-    let dyn_input = format::flac::open(&filename);
+    let dyn_input = format::flac::open(&filename).unwrap();
     let mut pb = player::play(dyn_input, sync::Arc::new(player::output::pulse::Output{}));
 
     let stdin = io::stdin();

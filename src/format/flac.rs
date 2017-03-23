@@ -24,15 +24,17 @@ struct Decoder<F>
     _f: marker::PhantomData<F>,
 }
 
-pub fn open(filename: &str) -> dyn::Audio {
+pub fn open(filename: &str) -> Result<dyn::Audio, LibFlacError> {
     unsafe {
         let decoder = FLAC__stream_decoder_new();
-        assert!(!decoder.is_null());
+        if decoder.is_null() {
+            return Err(LibFlacError::ConstructionFailed);
+        }
 
         let mut block = Box::new(None);
 
         let ffi_filename = ffi::CString::new(filename).unwrap();
-        let status = FLAC__stream_decoder_init_file(
+        let init_status = FLAC__stream_decoder_init_file(
             decoder,
             ffi_filename.as_ptr(),
             Some(write_cb),
@@ -40,19 +42,28 @@ pub fn open(filename: &str) -> dyn::Audio {
             Some(error_cb),
             block.deref_mut() as *mut Option<Block> as _,
         );
-        assert_eq!(status, FLAC__StreamDecoderInitStatus::FLAC__STREAM_DECODER_INIT_STATUS_OK);
+        if init_status != FLAC__StreamDecoderInitStatus::FLAC__STREAM_DECODER_INIT_STATUS_OK {
+            FLAC__stream_decoder_delete(decoder);
+            return Err(LibFlacError::InitFailed(init_status));
+        }
 
-        let ok = FLAC__stream_decoder_process_until_end_of_metadata(decoder);
-        assert_eq!(1, ok);
-        let ok = FLAC__stream_decoder_process_single(decoder);
-        assert_eq!(1, ok);
+        if FLAC__stream_decoder_process_until_end_of_metadata(decoder) != 1 {
+            let state = FLAC__stream_decoder_get_state(decoder);
+            FLAC__stream_decoder_delete(decoder);
+            return Err(LibFlacError::BadState(state));
+        }
+        if FLAC__stream_decoder_process_single(decoder) != 1 {
+            let state = FLAC__stream_decoder_get_state(decoder);
+            FLAC__stream_decoder_delete(decoder);
+            return Err(LibFlacError::BadState(state));
+        }
 
         let num_channels = FLAC__stream_decoder_get_channels(decoder);
         let sample_size = FLAC__stream_decoder_get_bits_per_sample(decoder);
         let sample_rate = FLAC__stream_decoder_get_sample_rate(decoder);
         let known_length = FLAC__stream_decoder_get_total_samples(decoder) != 0;
 
-        match (known_length, num_channels, sample_size) {
+        Ok(match (known_length, num_channels, sample_size) {
             (true, 2, 16) => dyn::Seek::StereoI16(Box::from(Decoder {
                 decoder: decoder,
                 current_block: block,
@@ -61,8 +72,12 @@ pub fn open(filename: &str) -> dyn::Audio {
                 sample_rate: sample_rate,
                 _f: marker::PhantomData,
             })).into(),
-            _ => unimplemented!(),
-        }
+            (kl, nc, ss) => return Err(LibFlacError::Unimplemented {
+                known_length: kl,
+                num_channels: nc,
+                sample_size: ss,
+            }),
+        })
     }
 }
 
@@ -87,8 +102,10 @@ impl<F> iter::Iterator for Decoder<F>
             self.current_sample = 0;
             // Load the next block.
             unsafe {
-                let ok = FLAC__stream_decoder_process_single(self.decoder);
-                assert_eq!(1, ok);
+                if FLAC__stream_decoder_process_single(self.decoder) != 1 {
+                    // Error, end the stream.
+                    return None;
+                }
                 let state = FLAC__stream_decoder_get_state(self.decoder);
                 if state == FLAC__STREAM_DECODER_END_OF_STREAM {
                     *self.current_block.deref_mut() = None;
@@ -110,19 +127,26 @@ impl<F> Source for Decoder<F>
 impl<F> Seekable for Decoder<F>
     where F: sample::Frame,
           F::Sample: DecodeSample {
-    fn seek(&mut self, pos: io::SeekFrom) -> Result<(), Box<error::Error>> {
+    fn seek(&mut self, pos: io::SeekFrom) -> Result<(), SeekError> {
         let abs_pos = match pos {
-            io::SeekFrom::Start(i) => i,
-            io::SeekFrom::End(i) => (self.length() as i64 + i) as u64,
-            io::SeekFrom::Current(i) => (self.current_position() as i64 + i) as u64,
+            io::SeekFrom::Start(i) => i as i64,
+            io::SeekFrom::End(i) => (self.length() as i64 + i),
+            io::SeekFrom::Current(i) => (self.current_position() as i64 + i),
         };
-        assert!(abs_pos < self.length());
+        if abs_pos < 0 || abs_pos >= self.length() as i64 {
+            return Err(SeekError::OutofRange{
+                pos: abs_pos,
+                size: self.length(),
+            })
+        }
         unsafe {
-            let ok = FLAC__stream_decoder_seek_absolute(self.decoder, abs_pos);
-            assert_eq!(1, ok);
+            if FLAC__stream_decoder_seek_absolute(self.decoder, abs_pos as u64) != 1 {
+                let state = FLAC__stream_decoder_get_state(self.decoder);
+                return Err(SeekError::Other(Box::from(LibFlacError::BadState(state))));
+            }
         }
         self.current_sample = 0;
-        self.abs_position = abs_pos;
+        self.abs_position = abs_pos as u64;
         Ok(())
     }
 
@@ -182,36 +206,55 @@ unsafe extern "C" fn write_cb(_: *const FLAC__StreamDecoder, frame: *const FLAC_
                 .collect()
         })
         .collect();
-    *(client_data as *mut Option<Block>) = Some(Block{ data: data });
+    let b = (client_data as *mut Option<Block>).as_mut().unwrap();
+    *b = Some(Block{ data: data });
     FLAC__StreamDecoderWriteStatus::FLAC__STREAM_DECODER_WRITE_STATUS_CONTINUE
 }
 
 unsafe extern "C" fn error_cb(_: *const FLAC__StreamDecoder, _: FLAC__StreamDecoderErrorStatus, _: *mut os::raw::c_void) { }
 
 
+#[derive(Debug)]
+pub enum LibFlacError {
+    ConstructionFailed,
+    InitFailed(FLAC__StreamDecoderInitStatus),
+    BadState(FLAC__StreamDecoderState),
+    Unimplemented{
+        known_length: bool,
+        num_channels: u32,
+        sample_size: u32,
+    },
+}
 
+impl fmt::Display for LibFlacError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            LibFlacError::ConstructionFailed => {
+                write!(f, "Failed to construct decoder")
+            },
+            LibFlacError::InitFailed(status) => unsafe {
+                let s = FLAC__StreamDecoderInitStatusString.offset(status as isize);
+                let errstr = ffi::CStr::from_ptr(*s);
+                write!(f, "Flac init failed: {}", errstr.to_str().unwrap())
+            },
+            LibFlacError::BadState(state) => unsafe {
+                let s = FLAC__StreamDecoderStateString.offset(state as isize);
+                let errstr = ffi::CStr::from_ptr(*s);
+                write!(f, "Flac bad state: {}", errstr.to_str().unwrap())
+            },
+            LibFlacError::Unimplemented{ known_length: kl, num_channels: nc, sample_size: ss } => {
+                write!(f, "Flac format not implemented: {} channels, {} bits, finite: {}", nc, ss, kl)
+            },
+        }
+    }
+}
 
+impl error::Error for LibFlacError {
+    fn description(&self) -> &str {
+        "Flac error"
+    }
 
-//#[derive(Debug)]
-//pub struct LibflacError(FLAC__StreamDecoderState);
-//
-//impl fmt::Display for PulseError {
-//    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-//        unsafe {
-//            let errstr = ffi::CStr::from_ptr(pa_strerror(self.0 as i32));
-//            write!(f, "Pulse error: {}", errstr.to_str().unwrap())
-//        }
-//    }
-//}
-//
-//impl error::Error for PulseError {
-//    fn description(&self) -> &str {
-//        unsafe {
-//            let errstr = ffi::CStr::from_ptr(pa_strerror(self.0 as i32));
-//            errstr.to_str().unwrap()
-//        }
-//    }
-//    fn cause(&self) -> Option<&error::Error> {
-//        None
-//    }
-//}
+    fn cause(&self) -> Option<&error::Error> {
+        None
+    }
+}

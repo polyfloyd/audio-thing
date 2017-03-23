@@ -18,7 +18,7 @@ pub trait Source: iter::Iterator
 pub trait Seekable {
     /// Seeks to the frame with the position specified by pos. The proceeding calls to next()
     /// should yield the frame at the specified index.
-    fn seek(&mut self, pos: io::SeekFrom) -> Result<(), Box<error::Error>>;
+    fn seek(&mut self, pos: io::SeekFrom) -> Result<(), SeekError>;
     /// Returns the total number of frames in the stream.
     fn length(&self) -> u64;
     /// Retrieves the index of the frame that will be read next.
@@ -30,6 +30,43 @@ pub trait Seekable {
 pub trait Seek: Source + Seekable
     where Self::Item: sample::Frame {
 }
+
+
+#[derive(Debug)]
+pub enum SeekError {
+    Other(Box<error::Error>),
+    OutofRange{
+        pos: i64,
+        size: u64,
+    },
+}
+
+impl fmt::Display for SeekError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            SeekError::Other(ref err) => {
+                write!(f, "Error seeking: {}", err)
+            },
+            SeekError::OutofRange{pos, size} => {
+                write!(f, "Error seeking: index out of range: {} (size: {})", pos, size)
+            },
+        }
+    }
+}
+
+impl error::Error for SeekError {
+    fn description(&self) -> &str {
+        "Seek error"
+    }
+
+    fn cause(&self) -> Option<&error::Error> {
+        match *self {
+            SeekError::Other(ref err) => Some(err.deref()),
+            _ => None,
+        }
+    }
+}
+
 
 pub trait Sink<F>
     where F: sample::Frame {
@@ -103,7 +140,7 @@ impl<S> Source for Shared<S>
 impl<S> Seekable for Shared<S>
     where S: Source + Seekable,
           S::Item: sample::Frame {
-    fn seek(&mut self, pos: io::SeekFrom) -> Result<(), Box<error::Error>> {
+    fn seek(&mut self, pos: io::SeekFrom) -> Result<(), SeekError> {
         self.input.lock().unwrap().seek(pos)
     }
 
@@ -138,7 +175,7 @@ impl<T> Source for Box<T>
 
 impl<T> Seekable for Box<T>
     where T: Seekable + ?Sized {
-    fn seek(&mut self, pos: io::SeekFrom) -> Result<(), Box<error::Error>> {
+    fn seek(&mut self, pos: io::SeekFrom) -> Result<(), SeekError> {
         self.deref_mut().seek(pos)
     }
 
