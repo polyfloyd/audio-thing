@@ -127,7 +127,7 @@ impl<F> Source for Decoder<F>
 impl<F> Seekable for Decoder<F>
     where F: sample::Frame,
           F::Sample: DecodeSample {
-    fn seek(&mut self, pos: io::SeekFrom) -> Result<(), SeekError> {
+    fn seek(&mut self, pos: io::SeekFrom) -> Result<u64, SeekError> {
         let abs_pos = match pos {
             io::SeekFrom::Start(i) => i as i64,
             io::SeekFrom::End(i) => (self.length() as i64 + i),
@@ -147,7 +147,7 @@ impl<F> Seekable for Decoder<F>
         }
         self.current_sample = 0;
         self.abs_position = abs_pos as u64;
-        Ok(())
+        Ok(self.abs_position)
     }
 
     fn length(&self) -> u64 {
