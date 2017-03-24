@@ -209,8 +209,9 @@ impl Playback {
     pub fn duration_time(&self) -> Option<time::Duration> {
         self.duration()
             .map(|num_samples| {
-                let secs = num_samples as f64 / self.sample_rate as f64;
-                time::Duration::new(secs.floor() as u64, (secs.fract() * 1_000_000_000.0) as u32)
+                let secs = num_samples / self.sample_rate as u64;
+                let nanos = (num_samples as u32 % self.sample_rate) * (1_000_000_000 / self.sample_rate);
+                time::Duration::new(secs, nanos)
             })
     }
 
@@ -223,21 +224,26 @@ impl Playback {
             .unwrap_or_else(|| *self.sample_counter.lock().unwrap())
     }
 
-    pub fn seek(&self, position: u64) {
+    /// Seeks to the sample at the specified position. If seeking is not supported, this is a
+    /// no-op.
+    pub fn seek(&mut self, position: u64) {
         self.seekable
             .as_ref()
             .map(|s| s.lock().unwrap().seek(io::SeekFrom::Start(position)));
     }
 
-    pub fn seek_time(&self, timestamp: time::Duration) {
+    /// Seeks using a duration.
+    pub fn seek_time(&mut self, timestamp: time::Duration) {
         let secs = timestamp.as_secs() * self.sample_rate as u64;
         self.seek(secs);
     }
 
     /// Returns the current position as a Duration.
     pub fn position_time(&self) -> time::Duration {
-        let secs = self.position() as f64 / self.sample_rate as f64;
-        time::Duration::new(secs.floor() as u64, (secs.fract() * 1_000_000_000.0) as u32)
+        let pos = self.position();
+        let secs = pos / self.sample_rate as u64;
+        let nanos = (pos % self.sample_rate as u64) * (1_000_000_000 / self.sample_rate as u64);
+        time::Duration::new(secs, nanos as u32)
     }
 
     pub fn playstate(&self) -> State {
