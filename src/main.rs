@@ -23,12 +23,12 @@ fn main() {
             "pl" => pb.set_playstate(player::State::Playing),
             "st" => {
                 let duration = pb.duration_time()
-                    .map(|d| format!("{:?}", d))
+                    .map(|d| format_duraton(&d))
                     .unwrap_or("∞".to_string());
                 println!("state:    {:?}", pb.playstate());
-                println!("position: {:?}/{}", pb.position_time(), duration);
+                println!("position: {}/{}", format_duraton(&pb.position_time()), duration);
                 println!("tempo:    {}", pb.tempo());
-                println!("latency:  {:?}", pb.stream.latency().unwrap());
+                println!("latency:  {}ns", pb.stream.latency().unwrap().subsec_nanos());
             },
             l if l.starts_with(":") => {
                 if let Ok(t) = l[1..].parse() {
@@ -42,4 +42,10 @@ fn main() {
             },
         }
     }
+}
+
+fn format_duraton(dur: &time::Duration) -> String {
+    let secs = dur.as_secs();
+    let nanos = dur.subsec_nanos();
+    format!("{:02}:{:02}.{}", secs / 60, secs % 60, nanos / 1_000_000_000)
 }
