@@ -1,16 +1,11 @@
 use std::*;
 use std::io::{Read, Write};
+use libpulse_sys::*;
 use sample;
 use ::audio;
 
 pub mod simple;
 pub use self::simple::*;
-
-mod pulse {
-    #![allow(dead_code, non_snake_case, non_camel_case_types, non_upper_case_globals, improper_ctypes)]
-    include!(concat!(env!("OUT_DIR"), "/pulse.rs"));
-}
-use self::pulse::*;
 
 
 pub struct Source<F: sample::Frame> {

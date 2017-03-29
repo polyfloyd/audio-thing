@@ -1,0 +1,10 @@
+[package]
+name = "libpulse_sys"
+version = "10.0.1"
+authors = ["polyfloyd <floyd@polyfloyd.net>"]
+build = "build.rs"
+
+[dependencies]
+
+[build-dependencies]
+bindgen = "~0.20"

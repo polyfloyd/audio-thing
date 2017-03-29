@@ -1,4 +1,6 @@
 extern crate dft;
+extern crate libflac_sys;
+extern crate libpulse_sys;
 extern crate sample;
 use std::*;
 use std::io::BufRead;

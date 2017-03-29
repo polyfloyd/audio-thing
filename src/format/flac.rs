@@ -1,13 +1,8 @@
 use std::*;
 use std::ops::{Deref, DerefMut};
+use libflac_sys::*;
 use sample::{self, I24};
 use ::audio::*;
-
-mod libflac {
-    #![allow(dead_code, non_snake_case, non_camel_case_types, non_upper_case_globals, improper_ctypes)]
-    include!(concat!(env!("OUT_DIR"), "/libflac.rs"));
-}
-use self::libflac::*;
 
 
 struct Decoder<F>
