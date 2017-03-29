@@ -53,6 +53,8 @@ impl Playback {
             dyn::Source::MonoU8(s) => dyn::Source::MonoU8(with_control(s, &flow_state, &sample_counter)),
             dyn::Source::MonoI16(s) => dyn::Source::MonoI16(with_control(s, &flow_state, &sample_counter)),
             dyn::Source::MonoU16(s) => dyn::Source::MonoU16(with_control(s, &flow_state, &sample_counter)),
+            dyn::Source::MonoI24(s) => dyn::Source::MonoI24(with_control(s, &flow_state, &sample_counter)),
+            dyn::Source::MonoU24(s) => dyn::Source::MonoU24(with_control(s, &flow_state, &sample_counter)),
             dyn::Source::MonoI32(s) => dyn::Source::MonoI32(with_control(s, &flow_state, &sample_counter)),
             dyn::Source::MonoU32(s) => dyn::Source::MonoU32(with_control(s, &flow_state, &sample_counter)),
             dyn::Source::MonoI64(s) => dyn::Source::MonoI64(with_control(s, &flow_state, &sample_counter)),
@@ -63,6 +65,8 @@ impl Playback {
             dyn::Source::StereoU8(s) => dyn::Source::StereoU8(with_control(s, &flow_state, &sample_counter)),
             dyn::Source::StereoI16(s) => dyn::Source::StereoI16(with_control(s, &flow_state, &sample_counter)),
             dyn::Source::StereoU16(s) => dyn::Source::StereoU16(with_control(s, &flow_state, &sample_counter)),
+            dyn::Source::StereoI24(s) => dyn::Source::StereoI24(with_control(s, &flow_state, &sample_counter)),
+            dyn::Source::StereoU24(s) => dyn::Source::StereoU24(with_control(s, &flow_state, &sample_counter)),
             dyn::Source::StereoI32(s) => dyn::Source::StereoI32(with_control(s, &flow_state, &sample_counter)),
             dyn::Source::StereoU32(s) => dyn::Source::StereoU32(with_control(s, &flow_state, &sample_counter)),
             dyn::Source::StereoI64(s) => dyn::Source::StereoI64(with_control(s, &flow_state, &sample_counter)),
@@ -122,6 +126,14 @@ impl Playback {
                 let (o, m) = with_control(s, &flow_state, &sample_counter, &tempo);
                 (dyn::Source::MonoU16(o), m)
             },
+            dyn::Seek::MonoI24(s) => {
+                let (o, m) = with_control(s, &flow_state, &sample_counter, &tempo);
+                (dyn::Source::MonoI24(o), m)
+            },
+            dyn::Seek::MonoU24(s) => {
+                let (o, m) = with_control(s, &flow_state, &sample_counter, &tempo);
+                (dyn::Source::MonoU24(o), m)
+            },
             dyn::Seek::MonoI32(s) => {
                 let (o, m) = with_control(s, &flow_state, &sample_counter, &tempo);
                 (dyn::Source::MonoI32(o), m)
@@ -161,6 +173,14 @@ impl Playback {
             dyn::Seek::StereoU16(s) => {
                 let (o, m) = with_control(s, &flow_state, &sample_counter, &tempo);
                 (dyn::Source::StereoU16(o), m)
+            },
+            dyn::Seek::StereoI24(s) => {
+                let (o, m) = with_control(s, &flow_state, &sample_counter, &tempo);
+                (dyn::Source::StereoI24(o), m)
+            },
+            dyn::Seek::StereoU24(s) => {
+                let (o, m) = with_control(s, &flow_state, &sample_counter, &tempo);
+                (dyn::Source::StereoU24(o), m)
             },
             dyn::Seek::StereoI32(s) => {
                 let (o, m) = with_control(s, &flow_state, &sample_counter, &tempo);

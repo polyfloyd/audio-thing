@@ -1,6 +1,6 @@
 use std::*;
 use std::sync::{Arc, Mutex};
-use sample::{self, Frame, Sample};
+use sample::{self, Frame, Sample, I24};
 use ::audio::*;
 use ::pulse;
 
@@ -16,6 +16,8 @@ impl super::Output for Output {
             dyn::Source::MonoU8(source) => Stream::new(source),
             dyn::Source::MonoI16(source) => Stream::new(source),
             dyn::Source::MonoU16(source) => Stream::new(source.map(|f| -> [i16; 1] { f.map(Sample::from_sample) }).source(sr)),
+            dyn::Source::MonoI24(source) => Stream::new(source),
+            dyn::Source::MonoU24(source) => Stream::new(source.map(|f| -> [I24; 1] { f.map(Sample::from_sample) }).source(sr)),
             dyn::Source::MonoI32(source) => Stream::new(source.map(|f| -> [f32; 1] { f.map(Sample::from_sample) }).source(sr)),
             dyn::Source::MonoU32(source) => Stream::new(source.map(|f| -> [f32; 1] { f.map(Sample::from_sample) }).source(sr)),
             dyn::Source::MonoI64(source) => Stream::new(source.map(|f| -> [f32; 1] { f.map(Sample::from_sample) }).source(sr)),
@@ -26,6 +28,8 @@ impl super::Output for Output {
             dyn::Source::StereoU8(source) => Stream::new(source),
             dyn::Source::StereoI16(source) => Stream::new(source),
             dyn::Source::StereoU16(source) => Stream::new(source.map(|f| -> [i16; 2] { f.map(Sample::from_sample) }).source(sr)),
+            dyn::Source::StereoI24(source) => Stream::new(source),
+            dyn::Source::StereoU24(source) => Stream::new(source.map(|f| -> [I24; 2] { f.map(Sample::from_sample) }).source(sr)),
             dyn::Source::StereoI32(source) => Stream::new(source.map(|f| -> [f32; 2] { f.map(Sample::from_sample) }).source(sr)),
             dyn::Source::StereoU32(source) => Stream::new(source.map(|f| -> [f32; 2] { f.map(Sample::from_sample) }).source(sr)),
             dyn::Source::StereoI64(source) => Stream::new(source.map(|f| -> [f32; 2] { f.map(Sample::from_sample) }).source(sr)),
