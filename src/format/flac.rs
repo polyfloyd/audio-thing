@@ -1,6 +1,6 @@
 use std::*;
 use std::ops::{Deref, DerefMut};
-use sample;
+use sample::{self, I24};
 use ::audio::*;
 
 mod libflac {
@@ -63,15 +63,31 @@ pub fn open(filename: &str) -> Result<dyn::Audio, LibFlacError> {
         let sample_rate = FLAC__stream_decoder_get_sample_rate(decoder);
         let known_length = FLAC__stream_decoder_get_total_samples(decoder) != 0;
 
+        macro_rules! dyn_type {
+            ($dyn:path) => {
+                $dyn(Box::from(Decoder {
+                    decoder: decoder,
+                    current_block: block,
+                    current_sample: 0,
+                    abs_position: 0,
+                    sample_rate: sample_rate,
+                    _f: marker::PhantomData,
+                })).into()
+            }
+        }
         Ok(match (known_length, num_channels, sample_size) {
-            (true, 2, 16) => dyn::Seek::StereoI16(Box::from(Decoder {
-                decoder: decoder,
-                current_block: block,
-                current_sample: 0,
-                abs_position: 0,
-                sample_rate: sample_rate,
-                _f: marker::PhantomData,
-            })).into(),
+            (false, 1, 8)  => dyn_type!(dyn::Source::MonoI8),
+            (false, 1, 16) => dyn_type!(dyn::Source::MonoI16),
+            (false, 1, 24) => dyn_type!(dyn::Source::MonoI24),
+            (false, 2, 8) => dyn_type!(dyn::Source::StereoI8),
+            (false, 2, 16) => dyn_type!(dyn::Source::StereoI16),
+            (false, 2, 24) => dyn_type!(dyn::Source::StereoI24),
+            (true, 1, 8) => dyn_type!(dyn::Seek::MonoI8),
+            (true, 1, 16) => dyn_type!(dyn::Seek::MonoI16),
+            (true, 1, 24) => dyn_type!(dyn::Seek::MonoI24),
+            (true, 2, 8) => dyn_type!(dyn::Seek::StereoI8),
+            (true, 2, 16) => dyn_type!(dyn::Seek::StereoI16),
+            (true, 2, 24) => dyn_type!(dyn::Seek::StereoI24),
             (kl, nc, ss) => return Err(LibFlacError::Unimplemented {
                 known_length: kl,
                 num_channels: nc,
@@ -182,12 +198,20 @@ impl<F> Drop for Decoder<F>
 }
 
 
-pub trait DecodeSample {
+trait DecodeSample {
     fn decode(s: i32) -> Self;
+}
+
+impl DecodeSample for i8 {
+    fn decode(s: i32) -> i8 { s as i8 }
 }
 
 impl DecodeSample for i16 {
     fn decode(s: i32) -> i16 { s as i16 }
+}
+
+impl DecodeSample for I24 {
+    fn decode(s: i32) -> I24 { I24::new_unchecked(s) }
 }
 
 
