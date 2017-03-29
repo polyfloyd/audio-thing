@@ -107,6 +107,33 @@ impl<T> From<T> for Seek
     fn from(seek: T) -> Seek { Seek::StereoF64(Box::from(seek)) }
 }
 
+impl From<Seek> for Source {
+    fn from(seek: Seek) -> Source {
+        match seek {
+            Seek::MonoI8(s) => Source::MonoI8(Box::new(s)),
+            Seek::MonoU8(s) => Source::MonoU8(Box::new(s)),
+            Seek::MonoI16(s) => Source::MonoI16(Box::new(s)),
+            Seek::MonoU16(s) => Source::MonoU16(Box::new(s)),
+            Seek::MonoI32(s) => Source::MonoI32(Box::new(s)),
+            Seek::MonoU32(s) => Source::MonoU32(Box::new(s)),
+            Seek::MonoI64(s) => Source::MonoI64(Box::new(s)),
+            Seek::MonoU64(s) => Source::MonoU64(Box::new(s)),
+            Seek::MonoF32(s) => Source::MonoF32(Box::new(s)),
+            Seek::MonoF64(s) => Source::MonoF64(Box::new(s)),
+            Seek::StereoI8(s) => Source::StereoI8(Box::new(s)),
+            Seek::StereoU8(s) => Source::StereoU8(Box::new(s)),
+            Seek::StereoI16(s) => Source::StereoI16(Box::new(s)),
+            Seek::StereoU16(s) => Source::StereoU16(Box::new(s)),
+            Seek::StereoI32(s) => Source::StereoI32(Box::new(s)),
+            Seek::StereoU32(s) => Source::StereoU32(Box::new(s)),
+            Seek::StereoI64(s) => Source::StereoI64(Box::new(s)),
+            Seek::StereoU64(s) => Source::StereoU64(Box::new(s)),
+            Seek::StereoF32(s) => Source::StereoF32(Box::new(s)),
+            Seek::StereoF64(s) => Source::StereoF64(Box::new(s)),
+        }
+    }
+}
+
 
 pub enum Sink {
     MonoI8(   Box<super::Sink<[i8;  1]>>),
@@ -151,4 +178,13 @@ impl From<Source> for Audio {
 
 impl From<Seek> for Audio {
     fn from(seek: Seek) -> Audio { Audio::Seek(seek) }
+}
+
+impl From<Audio> for Source {
+    fn from(aud: Audio) -> Source {
+        match aud {
+            Audio::Source(s) => s,
+            Audio::Seek(s) => s.into(),
+        }
+    }
 }
