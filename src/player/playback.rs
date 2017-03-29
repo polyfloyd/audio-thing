@@ -25,7 +25,7 @@ pub struct Playback {
     seekable: Option<Arc<Mutex<Seekable>>>,
 }
 
-pub fn play(audio: dyn::Audio, output: Arc<output::Output>) -> Playback {
+pub fn play(audio: dyn::Audio, output: &output::Output) -> Playback {
     match audio {
         dyn::Audio::Source(source) => {
             Playback::from_source(source, output)
@@ -37,7 +37,7 @@ pub fn play(audio: dyn::Audio, output: Arc<output::Output>) -> Playback {
 }
 
 impl Playback {
-    fn from_source(source: dyn::Source, output: Arc<output::Output>) -> Playback {
+    fn from_source(source: dyn::Source, output: &output::Output) -> Playback {
         let flow_state = Arc::new((Condvar::new(), Mutex::new(State::Playing)));
         let sample_counter = Arc::new(Mutex::new(0));
 
@@ -81,7 +81,7 @@ impl Playback {
         }
     }
 
-    fn from_seek(seek: dyn::Seek, output: Arc<output::Output>) -> Playback {
+    fn from_seek(seek: dyn::Seek, output: &output::Output) -> Playback {
         let flow_state = Arc::new((Condvar::new(), Mutex::new(State::Playing)));
         let sample_counter = Arc::new(Mutex::new(0));
         let tempo = Arc::new(Mutex::new(1.0));
