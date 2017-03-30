@@ -16,7 +16,7 @@ fn main() {
         .expect("$1 should be an audio file");
 
     let dyn_input = format::flac::open(&filename).unwrap();
-    let mut pb = player::play(dyn_input, &player::output::pulse::Output{});
+    let mut pb = player::Playback::new(dyn_input, &player::output::pulse::Output{});
 
     let stdin = io::stdin();
     for line in stdin.lock().lines() {

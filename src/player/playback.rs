@@ -25,20 +25,22 @@ pub struct Playback {
     seekable: Option<Arc<Mutex<Seekable>>>,
 }
 
-pub fn play(audio: dyn::Audio, output: &output::Output) -> Playback {
-    match audio {
-        dyn::Audio::Source(source) => {
-            Playback::from_source(source, output)
-        },
-        dyn::Audio::Seek(seek) => {
-            Playback::from_seek(seek, output)
-        },
-    }
-}
-
 impl Playback {
+    /// Initializes a new Playback. Playback should be started manually by setting the playstate to
+    /// Playing.
+    pub fn new(audio: dyn::Audio, output: &output::Output) -> Playback {
+        match audio {
+            dyn::Audio::Source(source) => {
+                Playback::from_source(source, output)
+            },
+            dyn::Audio::Seek(seek) => {
+                Playback::from_seek(seek, output)
+            },
+        }
+    }
+
     fn from_source(source: dyn::Source, output: &output::Output) -> Playback {
-        let flow_state = Arc::new((Condvar::new(), Mutex::new(State::Playing)));
+        let flow_state = Arc::new((Condvar::new(), Mutex::new(State::Paused)));
         let sample_counter = Arc::new(Mutex::new(0));
 
         fn with_control<I>(source: I, fs: &Arc<(Condvar, Mutex<State>)>, sc: &Arc<Mutex<u64>>) -> Box<Source<Item=I::Item> + Send>
@@ -86,7 +88,7 @@ impl Playback {
     }
 
     fn from_seek(seek: dyn::Seek, output: &output::Output) -> Playback {
-        let flow_state = Arc::new((Condvar::new(), Mutex::new(State::Playing)));
+        let flow_state = Arc::new((Condvar::new(), Mutex::new(State::Paused)));
         let sample_counter = Arc::new(Mutex::new(0));
         let tempo = Arc::new(Mutex::new(1.0));
 
