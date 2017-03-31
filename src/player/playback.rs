@@ -343,6 +343,19 @@ impl<S> Source for FlowControl<S>
     fn sample_rate(&self) -> u32 { self.input.sample_rate() }
 }
 
+impl<S> Drop for FlowControl<S>
+    where S: Source,
+          S::Item: sample::Frame {
+    // If the state is set to paused, another thread attempting to read from the stream is blocked.
+    // Here, we set the state to stopped when this FlowControl is dropped, so that the reading
+    // thread will never deadlock.
+    fn drop(&mut self) {
+        let &(ref cvar, ref lock) = &*self.state;
+        *lock.lock().unwrap() = State::Stopped;
+        cvar.notify_all();
+    }
+}
+
 trait IntoFlowControl: Source + Sized
     where Self::Item: sample::Frame {
     fn flow_control(self, state: Arc<(Condvar, Mutex<State>)>) -> FlowControl<Self> {
