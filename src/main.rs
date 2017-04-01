@@ -13,10 +13,13 @@ mod pulse;
 
 fn main() {
     let filename = env::args().nth(1)
+        .map(path::PathBuf::from)
         .expect("$1 should be an audio file");
 
     let dyn_input = format::flac::open(&filename).unwrap();
+    assert!(dyn_input.is_seek());
     let mut pb = player::Playback::new(dyn_input, &player::output::pulse::Output{});
+    pb.set_playstate(player::State::Playing);
 
     let stdin = io::stdin();
     for line in stdin.lock().lines() {

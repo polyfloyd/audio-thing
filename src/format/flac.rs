@@ -1,15 +1,17 @@
 use std::*;
-use std::ops::{Deref, DerefMut};
+use std::ops::DerefMut;
 use libflac_sys::*;
 use sample::{self, I24};
 use ::audio::*;
 
 
-struct Decoder<F>
+struct Decoder<F, R>
     where F: sample::Frame,
-          F::Sample: DecodeSample {
+          F::Sample: DecodeSample,
+          R: io::Read + io::Seek + SeekExt {
     decoder: *mut FLAC__StreamDecoder,
-    current_block: Box<Option<Block>>,
+    cb_data: Box<(R, Option<Block>)>,
+
     /// The index of the next read sample in the current block.
     current_sample: usize,
     /// The absolute position in the stream.
@@ -19,23 +21,31 @@ struct Decoder<F>
     _f: marker::PhantomData<F>,
 }
 
-pub fn open(filename: &str) -> Result<dyn::Audio, LibFlacError> {
+pub fn open(filename: &path::Path) -> Result<dyn::Audio, LibFlacError> {
+    decode(fs::File::open(filename)?)
+}
+
+pub fn decode<R>(input: R) -> Result<dyn::Audio, LibFlacError>
+    where R: io::Read + io::Seek + SeekExt + 'static {
     unsafe {
         let decoder = FLAC__stream_decoder_new();
         if decoder.is_null() {
             return Err(LibFlacError::ConstructionFailed);
         }
 
-        let mut block = Box::new(None);
+        let mut cb_data = Box::new((input, None));
 
-        let ffi_filename = ffi::CString::new(filename).unwrap();
-        let init_status = FLAC__stream_decoder_init_file(
+        let init_status = FLAC__stream_decoder_init_stream(
             decoder,
-            ffi_filename.as_ptr(),
-            Some(write_cb),
-            None,
+            Some(read_cb::<R>),
+            Some(seek_cb::<R>),
+            Some(tell_cb::<R>),
+            Some(length_cb::<R>),
+            Some(eof_cb::<R>),
+            Some(write_cb::<R>),
+            None, // Metadata
             Some(error_cb),
-            block.deref_mut() as *mut Option<Block> as _,
+            cb_data.deref_mut() as *mut _ as _,
         );
         if init_status != FLAC__StreamDecoderInitStatus::FLAC__STREAM_DECODER_INIT_STATUS_OK {
             FLAC__stream_decoder_delete(decoder);
@@ -62,7 +72,7 @@ pub fn open(filename: &str) -> Result<dyn::Audio, LibFlacError> {
             ($dyn:path) => {
                 $dyn(Box::from(Decoder {
                     decoder: decoder,
-                    current_block: block,
+                    cb_data: cb_data,
                     current_sample: 0,
                     abs_position: 0,
                     sample_rate: sample_rate,
@@ -92,24 +102,28 @@ pub fn open(filename: &str) -> Result<dyn::Audio, LibFlacError> {
     }
 }
 
-impl<F> iter::Iterator for Decoder<F>
+impl<F, R> iter::Iterator for Decoder<F, R>
     where F: sample::Frame,
-          F::Sample: DecodeSample {
+          F::Sample: DecodeSample,
+          R: io::Read + io::Seek + SeekExt {
     type Item = F;
     fn next(&mut self) -> Option<Self::Item> {
-        if self.current_block.is_none() {
-            return None;
-        }
-
-        let frame = {
-            let ref data = self.current_block.deref().as_ref().unwrap().data;
-            F::from_fn(|ch| {
-                F::Sample::decode(data[ch][self.current_sample])
-            })
+        let (frame, need_new_block) = {
+            let current_block = match self.cb_data.1.as_ref() {
+                Some(b) => b,
+                None => return None,
+            };
+            let frame = {
+                let cs = self.current_sample;
+                F::from_fn(|ch| {
+                    F::Sample::decode(current_block.data[ch][cs])
+                })
+            };
+            self.current_sample += 1;
+            (frame, self.current_sample == current_block.data[0].len())
         };
 
-        self.current_sample += 1;
-        if self.current_sample == self.current_block.deref().as_ref().unwrap().data[0].len() {
+        if need_new_block {
             self.current_sample = 0;
             // Load the next block.
             unsafe {
@@ -119,7 +133,7 @@ impl<F> iter::Iterator for Decoder<F>
                 }
                 let state = FLAC__stream_decoder_get_state(self.decoder);
                 if state == FLAC__STREAM_DECODER_END_OF_STREAM {
-                    *self.current_block.deref_mut() = None;
+                    self.cb_data.deref_mut().1 = None;
                 }
             }
         }
@@ -129,15 +143,17 @@ impl<F> iter::Iterator for Decoder<F>
     }
 }
 
-impl<F> Source for Decoder<F>
+impl<F, R> Source for Decoder<F, R>
     where F: sample::Frame,
-          F::Sample: DecodeSample {
+          F::Sample: DecodeSample,
+          R: io::Read + io::Seek + SeekExt {
     fn sample_rate(&self) -> u32 { self.sample_rate }
 }
 
-impl<F> Seekable for Decoder<F>
+impl<F, R> Seekable for Decoder<F, R>
     where F: sample::Frame,
-          F::Sample: DecodeSample {
+          F::Sample: DecodeSample,
+          R: io::Read + io::Seek + SeekExt {
     fn seek(&mut self, pos: io::SeekFrom) -> Result<u64, SeekError> {
         let abs_pos = match pos {
             io::SeekFrom::Start(i) => i as i64,
@@ -174,17 +190,20 @@ impl<F> Seekable for Decoder<F>
     }
 }
 
-impl<F> Seek for Decoder<F>
+impl<F, R> Seek for Decoder<F, R>
     where F: sample::Frame,
-          F::Sample: DecodeSample { }
+          F::Sample: DecodeSample,
+          R: io::Read + io::Seek + SeekExt { }
 
-unsafe impl<F> Send for Decoder<F>
+unsafe impl<F, R> Send for Decoder<F, R>
     where F: sample::Frame,
-          F::Sample: DecodeSample { }
+          F::Sample: DecodeSample,
+          R: io::Read + io::Seek + SeekExt { }
 
-impl<F> Drop for Decoder<F>
+impl<F, R> Drop for Decoder<F, R>
     where F: sample::Frame,
-          F::Sample: DecodeSample {
+          F::Sample: DecodeSample,
+          R: io::Read + io::Seek + SeekExt {
     fn drop(&mut self) {
         unsafe {
             FLAC__stream_decoder_delete(self.decoder);
@@ -215,7 +234,12 @@ struct Block {
 }
 
 
-unsafe extern "C" fn write_cb(_: *const FLAC__StreamDecoder, frame: *const FLAC__Frame, buffer: *const *const FLAC__int32, client_data: *mut os::raw::c_void) -> FLAC__StreamDecoderWriteStatus {
+unsafe extern "C" fn error_cb(_: *const FLAC__StreamDecoder, _: FLAC__StreamDecoderErrorStatus, _: *mut os::raw::c_void) { }
+
+unsafe extern "C" fn write_cb<R>(_: *const FLAC__StreamDecoder, frame: *const FLAC__Frame, buffer: *const *const FLAC__int32, client_data: *mut os::raw::c_void) -> FLAC__StreamDecoderWriteStatus
+    where R: io::Read + io::Seek {
+    let &mut (_, ref mut block) = (client_data as *mut (R, Option<Block>)).as_mut().unwrap();
+
     let fr = frame.as_ref().unwrap();
     let data = (0..fr.header.channels)
         .map(|ch| {
@@ -225,16 +249,96 @@ unsafe extern "C" fn write_cb(_: *const FLAC__StreamDecoder, frame: *const FLAC_
                 .collect()
         })
         .collect();
-    let b = (client_data as *mut Option<Block>).as_mut().unwrap();
-    *b = Some(Block{ data: data });
+    *block = Some(Block{ data: data });
     FLAC__StreamDecoderWriteStatus::FLAC__STREAM_DECODER_WRITE_STATUS_CONTINUE
 }
 
-unsafe extern "C" fn error_cb(_: *const FLAC__StreamDecoder, _: FLAC__StreamDecoderErrorStatus, _: *mut os::raw::c_void) { }
+unsafe extern "C" fn read_cb<R>(_: *const FLAC__StreamDecoder, buffer: *mut u8, bytes: *mut usize, client_data: *mut os::raw::c_void) -> FLAC__StreamDecoderReadStatus
+    where R: io::Read {
+    let &mut (ref mut input, _) = (client_data as *mut (R, Option<Block>)).as_mut().unwrap();
+
+    let mut buf = slice::from_raw_parts_mut(buffer, *bytes);
+    *bytes = match input.read(&mut buf) {
+        Ok(read) => read,
+        Err(_) => return FLAC__StreamDecoderReadStatus::FLAC__STREAM_DECODER_READ_STATUS_ABORT,
+    };
+    if *bytes == 0 {
+        FLAC__StreamDecoderReadStatus::FLAC__STREAM_DECODER_READ_STATUS_END_OF_STREAM
+    } else {
+        FLAC__StreamDecoderReadStatus::FLAC__STREAM_DECODER_READ_STATUS_CONTINUE
+    }
+}
+
+unsafe extern "C" fn seek_cb<R>(_: *const FLAC__StreamDecoder, absolute_byte_offset: u64, client_data: *mut os::raw::c_void) -> FLAC__StreamDecoderSeekStatus
+    where R: io::Read + io::Seek {
+    let &mut (ref mut input, _) = (client_data as *mut (R, Option<Block>)).as_mut().unwrap();
+    match input.seek(io::SeekFrom::Start(absolute_byte_offset)) {
+        Ok(_) => FLAC__StreamDecoderSeekStatus::FLAC__STREAM_DECODER_SEEK_STATUS_OK,
+        Err(_) => FLAC__StreamDecoderSeekStatus::FLAC__STREAM_DECODER_SEEK_STATUS_ERROR,
+    }
+}
+
+unsafe extern "C" fn tell_cb<R>(_: *const FLAC__StreamDecoder, absolute_byte_offset: *mut u64, client_data: *mut os::raw::c_void) -> FLAC__StreamDecoderTellStatus
+    where R: io::Read + io::Seek + SeekExt {
+    let &mut (ref mut input, _) = (client_data as *mut (R, Option<Block>)).as_mut().unwrap();
+    if let Ok(pos) = input.tell() {
+        *absolute_byte_offset = pos;
+        return FLAC__StreamDecoderTellStatus::FLAC__STREAM_DECODER_TELL_STATUS_OK;
+    }
+    FLAC__StreamDecoderTellStatus::FLAC__STREAM_DECODER_TELL_STATUS_ERROR
+}
+
+unsafe extern "C" fn length_cb<R>(_: *const FLAC__StreamDecoder, stream_length: *mut u64, client_data: *mut os::raw::c_void) -> FLAC__StreamDecoderLengthStatus
+    where R: io::Read + io::Seek + SeekExt {
+    let &mut (ref mut input, _) = (client_data as *mut (R, Option<Block>)).as_mut().unwrap();
+    if let Ok(pos) = input.length() {
+        *stream_length = pos;
+        return FLAC__StreamDecoderLengthStatus::FLAC__STREAM_DECODER_LENGTH_STATUS_OK;
+    }
+    FLAC__StreamDecoderLengthStatus::FLAC__STREAM_DECODER_LENGTH_STATUS_ERROR
+}
+
+unsafe extern "C" fn eof_cb<R>(_: *const FLAC__StreamDecoder, client_data: *mut os::raw::c_void) -> i32
+    where R: io::Read + io::Seek + SeekExt {
+    let &mut (ref mut input, _) = (client_data as *mut (R, Option<Block>)).as_mut().unwrap();
+    if let true = input.at_eof() {
+        1
+    } else {
+        0
+    }
+}
+
+
+pub trait SeekExt: io::Read + io::Seek {
+    fn length(&mut self) -> Result<u64, ()>;
+
+    fn at_eof(&mut self) -> bool {
+        self.tell()
+            .and_then(|pos| self.length().map(|len| pos >= len))
+            .unwrap_or(true)
+    }
+
+    fn tell(&mut self) -> Result<u64, ()> {
+        match self.seek(io::SeekFrom::Current(0)) {
+            Ok(pos) => Ok(pos),
+            Err(_) => return Err(()),
+        }
+    }
+}
+
+impl SeekExt for fs::File {
+    fn length(&mut self) -> Result<u64, ()> {
+        match self.metadata() {
+            Ok(meta) => Ok(meta.len()),
+            Err(_) => Err(()),
+        }
+    }
+}
 
 
 #[derive(Debug)]
 pub enum LibFlacError {
+    IO(io::Error),
     ConstructionFailed,
     InitFailed(FLAC__StreamDecoderInitStatus),
     BadState(FLAC__StreamDecoderState),
@@ -248,6 +352,9 @@ pub enum LibFlacError {
 impl fmt::Display for LibFlacError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
+            LibFlacError::IO(ref err) => {
+                write!(f, "IO: {}", err)
+            },
             LibFlacError::ConstructionFailed => {
                 write!(f, "Failed to construct decoder")
             },
@@ -274,6 +381,15 @@ impl error::Error for LibFlacError {
     }
 
     fn cause(&self) -> Option<&error::Error> {
-        None
+        match *self {
+            LibFlacError::IO(ref err) => Some(err),
+            _ => None,
+        }
+    }
+}
+
+impl From<io::Error> for LibFlacError {
+    fn from(err: io::Error) -> LibFlacError {
+        LibFlacError::IO(err)
     }
 }

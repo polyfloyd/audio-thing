@@ -189,10 +189,17 @@ pub enum Audio {
 }
 
 impl Audio {
+    pub fn is_seek(&self) -> bool {
+        match *self {
+            Audio::Source(_) => false,
+            Audio::Seek(_) => true,
+        }
+    }
+
     pub fn sample_rate(&self) -> u32 {
-        match self {
-            &Audio::Source(ref s) => s.sample_rate(),
-            &Audio::Seek(ref s) => s.sample_rate(),
+        match *self {
+            Audio::Source(ref s) => s.sample_rate(),
+            Audio::Seek(ref s) => s.sample_rate(),
         }
     }
 }
