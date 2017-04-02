@@ -1,7 +1,10 @@
+extern crate badlog;
 extern crate dft;
+#[macro_use]
+extern crate log;
+extern crate sample;
 extern crate libflac_sys;
 extern crate libpulse_sys;
-extern crate sample;
 use std::*;
 use std::io::BufRead;
 
@@ -12,6 +15,12 @@ mod player;
 mod pulse;
 
 fn main() {
+    if cfg!(release) {
+        badlog::init_from_env("LOG");
+    } else {
+        badlog::init(Some("debug"));
+    }
+
     let filename = env::args().nth(1)
         .map(path::PathBuf::from)
         .expect("$1 should be an audio file");

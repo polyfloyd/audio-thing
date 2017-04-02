@@ -22,6 +22,7 @@ struct Decoder<F, R>
 }
 
 pub fn open(filename: &path::Path) -> Result<dyn::Audio, LibFlacError> {
+    debug!("opening {} for reading", filename.to_string_lossy());
     decode(fs::File::open(filename)?)
 }
 
@@ -66,7 +67,12 @@ pub fn decode<R>(input: R) -> Result<dyn::Audio, LibFlacError>
         let num_channels = FLAC__stream_decoder_get_channels(decoder);
         let sample_size = FLAC__stream_decoder_get_bits_per_sample(decoder);
         let sample_rate = FLAC__stream_decoder_get_sample_rate(decoder);
-        let known_length = FLAC__stream_decoder_get_total_samples(decoder) != 0;
+        let length = FLAC__stream_decoder_get_total_samples(decoder);
+        if length == 0 {
+            debug!("got FLAC stream info: {} channels, {} bits, {} hz, length unknown", num_channels, sample_size, sample_rate);
+        } else {
+            debug!("got FLAC stream info: {} channels, {} bits, {} hz, {} samples", num_channels, sample_size, sample_rate, length);
+        }
 
         macro_rules! dyn_type {
             ($dyn:path) => {
@@ -80,7 +86,7 @@ pub fn decode<R>(input: R) -> Result<dyn::Audio, LibFlacError>
                 })).into()
             }
         }
-        Ok(match (known_length, num_channels, sample_size) {
+        Ok(match (length != 0, num_channels, sample_size) {
             (false, 1, 8)  => dyn_type!(dyn::Source::MonoI8),
             (false, 1, 16) => dyn_type!(dyn::Source::MonoI16),
             (false, 1, 24) => dyn_type!(dyn::Source::MonoI24),
@@ -94,7 +100,7 @@ pub fn decode<R>(input: R) -> Result<dyn::Audio, LibFlacError>
             (true, 2, 16) => dyn_type!(dyn::Seek::StereoI16),
             (true, 2, 24) => dyn_type!(dyn::Seek::StereoI24),
             (kl, nc, ss) => return Err(LibFlacError::Unimplemented {
-                known_length: kl,
+                known_length: length != 0,
                 num_channels: nc,
                 sample_size: ss,
             }),
@@ -234,7 +240,9 @@ struct Block {
 }
 
 
-unsafe extern "C" fn error_cb(_: *const FLAC__StreamDecoder, _: FLAC__StreamDecoderErrorStatus, _: *mut os::raw::c_void) { }
+unsafe extern "C" fn error_cb(_: *const FLAC__StreamDecoder, status: FLAC__StreamDecoderErrorStatus, _: *mut os::raw::c_void) {
+    error!("FLAC error callback called: {:?}", status);
+}
 
 unsafe extern "C" fn write_cb<R>(_: *const FLAC__StreamDecoder, frame: *const FLAC__Frame, buffer: *const *const FLAC__int32, client_data: *mut os::raw::c_void) -> FLAC__StreamDecoderWriteStatus
     where R: io::Read + io::Seek {

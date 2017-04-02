@@ -56,7 +56,7 @@ impl<S> Stream<S>
               S::Item: sample::Frame + Send,
               <S::Item as sample::Frame>::Sample: Sample + pulse::AsSampleFormat {
         let app_name = format!("{} v{}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
-        let pulse_sink = try!(pulse::sink(&app_name, "TODO", source.sample_rate()));
+        let pulse_sink = pulse::sink(&app_name, "TODO", source.sample_rate())?;
         let sink = Arc::new(Mutex::new((pulse_sink, false)));
 
         let sink_out = sink.clone();
@@ -64,9 +64,11 @@ impl<S> Stream<S>
             for frame in source {
                 let mut out_state = sink_out.lock().unwrap();
                 if out_state.1 {
-                    return;
+                    break;
                 }
-                out_state.0.write_frame(frame).unwrap(); // TODO: handle write error
+                if let Err(err) = out_state.0.write_frame(frame) {
+                    error!("Error writing stream: {}", err);
+                }
             }
         });
         Ok(Box::new(Stream::<S> {
