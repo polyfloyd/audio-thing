@@ -10,7 +10,7 @@ struct Decoder<F, R>
           F::Sample: DecodeSample,
           R: io::Read + io::Seek + SeekExt {
     decoder: *mut FLAC__StreamDecoder,
-    cb_data: Box<(R, Option<Block>)>,
+    cb_data: Box<DecoderCallbackData<R>>,
 
     /// The index of the next read sample in the current block.
     current_sample: usize,
@@ -19,6 +19,11 @@ struct Decoder<F, R>
     sample_rate: u32,
 
     _f: marker::PhantomData<F>,
+}
+
+struct DecoderCallbackData<R> {
+    input: R,
+    current_block: Option<Block>,
 }
 
 pub fn open(filename: &path::Path) -> Result<dyn::Audio, LibFlacError> {
@@ -34,7 +39,10 @@ pub fn decode<R>(input: R) -> Result<dyn::Audio, LibFlacError>
             return Err(LibFlacError::ConstructionFailed);
         }
 
-        let mut cb_data = Box::new((input, None));
+        let mut cb_data = Box::new(DecoderCallbackData{
+            input: input,
+            current_block: None,
+        });
 
         let init_status = FLAC__stream_decoder_init_stream(
             decoder,
@@ -114,34 +122,33 @@ impl<F, R> iter::Iterator for Decoder<F, R>
           R: io::Read + io::Seek + SeekExt {
     type Item = F;
     fn next(&mut self) -> Option<Self::Item> {
-        let (frame, need_new_block) = {
-            let current_block = match self.cb_data.1.as_ref() {
-                Some(b) => b,
-                None => return None,
-            };
+        if self.cb_data.current_block.is_none() {
+            self.current_sample = 0;
+            unsafe {
+                if FLAC__stream_decoder_process_single(self.decoder) != 1 {
+                    let state = FLAC__stream_decoder_get_state(self.decoder);
+                    if state != FLAC__STREAM_DECODER_END_OF_STREAM {
+                        error!("{}", LibFlacError::BadState(state));
+                    }
+                    return None;
+                }
+            }
+            assert!(self.cb_data.current_block.is_some());
+        }
+
+        let (frame, block_consumed) = {
+            let block = self.cb_data.current_block.as_ref().unwrap();
             let frame = {
                 let cs = self.current_sample;
                 F::from_fn(|ch| {
-                    F::Sample::decode(current_block.data[ch][cs])
+                    F::Sample::decode(block.data[ch][cs])
                 })
             };
             self.current_sample += 1;
-            (frame, self.current_sample == current_block.data[0].len())
+            (frame, self.current_sample == block.data[0].len())
         };
-
-        if need_new_block {
-            self.current_sample = 0;
-            // Load the next block.
-            unsafe {
-                if FLAC__stream_decoder_process_single(self.decoder) != 1 {
-                    // Error, end the stream.
-                    return None;
-                }
-                let state = FLAC__stream_decoder_get_state(self.decoder);
-                if state == FLAC__STREAM_DECODER_END_OF_STREAM {
-                    self.cb_data.deref_mut().1 = None;
-                }
-            }
+        if block_consumed {
+            self.cb_data.current_block = None;
         }
 
         self.abs_position += 1;
@@ -246,10 +253,10 @@ unsafe extern "C" fn error_cb(_: *const FLAC__StreamDecoder, status: FLAC__Strea
 
 unsafe extern "C" fn write_cb<R>(_: *const FLAC__StreamDecoder, frame: *const FLAC__Frame, buffer: *const *const FLAC__int32, client_data: *mut os::raw::c_void) -> FLAC__StreamDecoderWriteStatus
     where R: io::Read + io::Seek {
-    let &mut (_, ref mut block) = (client_data as *mut (R, Option<Block>)).as_mut().unwrap();
+    let data = (client_data as *mut DecoderCallbackData<R>).as_mut().unwrap();
 
     let fr = frame.as_ref().unwrap();
-    let data = (0..fr.header.channels)
+    let block_data = (0..fr.header.channels)
         .map(|ch| {
             let chan_base_ptr = *buffer.offset(ch as isize);
             (0..fr.header.blocksize)
@@ -257,16 +264,16 @@ unsafe extern "C" fn write_cb<R>(_: *const FLAC__StreamDecoder, frame: *const FL
                 .collect()
         })
         .collect();
-    *block = Some(Block{ data: data });
+    data.current_block = Some(Block{ data: block_data });
     FLAC__StreamDecoderWriteStatus::FLAC__STREAM_DECODER_WRITE_STATUS_CONTINUE
 }
 
 unsafe extern "C" fn read_cb<R>(_: *const FLAC__StreamDecoder, buffer: *mut u8, bytes: *mut usize, client_data: *mut os::raw::c_void) -> FLAC__StreamDecoderReadStatus
     where R: io::Read {
-    let &mut (ref mut input, _) = (client_data as *mut (R, Option<Block>)).as_mut().unwrap();
+    let mut data = (client_data as *mut DecoderCallbackData<R>).as_mut().unwrap();
 
     let mut buf = slice::from_raw_parts_mut(buffer, *bytes);
-    *bytes = match input.read(&mut buf) {
+    *bytes = match data.input.read(&mut buf) {
         Ok(read) => read,
         Err(_) => return FLAC__StreamDecoderReadStatus::FLAC__STREAM_DECODER_READ_STATUS_ABORT,
     };
@@ -279,8 +286,8 @@ unsafe extern "C" fn read_cb<R>(_: *const FLAC__StreamDecoder, buffer: *mut u8, 
 
 unsafe extern "C" fn seek_cb<R>(_: *const FLAC__StreamDecoder, absolute_byte_offset: u64, client_data: *mut os::raw::c_void) -> FLAC__StreamDecoderSeekStatus
     where R: io::Read + io::Seek {
-    let &mut (ref mut input, _) = (client_data as *mut (R, Option<Block>)).as_mut().unwrap();
-    match input.seek(io::SeekFrom::Start(absolute_byte_offset)) {
+    let mut data = (client_data as *mut DecoderCallbackData<R>).as_mut().unwrap();
+    match data.input.seek(io::SeekFrom::Start(absolute_byte_offset)) {
         Ok(_) => FLAC__StreamDecoderSeekStatus::FLAC__STREAM_DECODER_SEEK_STATUS_OK,
         Err(_) => FLAC__StreamDecoderSeekStatus::FLAC__STREAM_DECODER_SEEK_STATUS_ERROR,
     }
@@ -288,8 +295,8 @@ unsafe extern "C" fn seek_cb<R>(_: *const FLAC__StreamDecoder, absolute_byte_off
 
 unsafe extern "C" fn tell_cb<R>(_: *const FLAC__StreamDecoder, absolute_byte_offset: *mut u64, client_data: *mut os::raw::c_void) -> FLAC__StreamDecoderTellStatus
     where R: io::Read + io::Seek + SeekExt {
-    let &mut (ref mut input, _) = (client_data as *mut (R, Option<Block>)).as_mut().unwrap();
-    if let Ok(pos) = input.tell() {
+    let mut data = (client_data as *mut DecoderCallbackData<R>).as_mut().unwrap();
+    if let Ok(pos) = data.input.tell() {
         *absolute_byte_offset = pos;
         return FLAC__StreamDecoderTellStatus::FLAC__STREAM_DECODER_TELL_STATUS_OK;
     }
@@ -298,8 +305,8 @@ unsafe extern "C" fn tell_cb<R>(_: *const FLAC__StreamDecoder, absolute_byte_off
 
 unsafe extern "C" fn length_cb<R>(_: *const FLAC__StreamDecoder, stream_length: *mut u64, client_data: *mut os::raw::c_void) -> FLAC__StreamDecoderLengthStatus
     where R: io::Read + io::Seek + SeekExt {
-    let &mut (ref mut input, _) = (client_data as *mut (R, Option<Block>)).as_mut().unwrap();
-    if let Ok(pos) = input.length() {
+    let mut data = (client_data as *mut DecoderCallbackData<R>).as_mut().unwrap();
+    if let Ok(pos) = data.input.length() {
         *stream_length = pos;
         return FLAC__StreamDecoderLengthStatus::FLAC__STREAM_DECODER_LENGTH_STATUS_OK;
     }
@@ -308,8 +315,8 @@ unsafe extern "C" fn length_cb<R>(_: *const FLAC__StreamDecoder, stream_length: 
 
 unsafe extern "C" fn eof_cb<R>(_: *const FLAC__StreamDecoder, client_data: *mut os::raw::c_void) -> i32
     where R: io::Read + io::Seek + SeekExt {
-    let &mut (ref mut input, _) = (client_data as *mut (R, Option<Block>)).as_mut().unwrap();
-    if let true = input.at_eof() {
+    let mut data = (client_data as *mut DecoderCallbackData<R>).as_mut().unwrap();
+    if data.input.at_eof() {
         1
     } else {
         0
