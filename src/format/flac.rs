@@ -1,8 +1,10 @@
 use std::*;
+use std::borrow::Cow;
 use std::ops::DerefMut;
 use libflac_sys::*;
 use sample::{self, I24};
 use ::audio::*;
+use ::format;
 
 
 struct Decoder<F, R>
@@ -24,14 +26,15 @@ struct Decoder<F, R>
 struct DecoderCallbackData<R> {
     input: R,
     current_block: Option<Block>,
+    meta: Option<format::Metadata>,
 }
 
-pub fn open(filename: &path::Path) -> Result<dyn::Audio, LibFlacError> {
+pub fn open(filename: &path::Path) -> Result<(dyn::Audio, format::Metadata), LibFlacError> {
     debug!("opening {} for reading", filename.to_string_lossy());
     decode(fs::File::open(filename)?)
 }
 
-pub fn decode<R>(input: R) -> Result<dyn::Audio, LibFlacError>
+pub fn decode<R>(input: R) -> Result<(dyn::Audio, format::Metadata), LibFlacError>
     where R: io::Read + io::Seek + SeekExt + 'static {
     unsafe {
         let decoder = FLAC__stream_decoder_new();
@@ -42,8 +45,10 @@ pub fn decode<R>(input: R) -> Result<dyn::Audio, LibFlacError>
         let mut cb_data = Box::new(DecoderCallbackData{
             input: input,
             current_block: None,
+            meta: Some(format::Metadata::new()),
         });
 
+        assert!(FLAC__stream_decoder_set_metadata_respond_all(decoder) == 1);
         let init_status = FLAC__stream_decoder_init_stream(
             decoder,
             Some(read_cb::<R>),
@@ -52,7 +57,7 @@ pub fn decode<R>(input: R) -> Result<dyn::Audio, LibFlacError>
             Some(length_cb::<R>),
             Some(eof_cb::<R>),
             Some(write_cb::<R>),
-            None, // Metadata
+            Some(metadata_cb::<R>),
             Some(error_cb),
             cb_data.deref_mut() as *mut _ as _,
         );
@@ -76,11 +81,14 @@ pub fn decode<R>(input: R) -> Result<dyn::Audio, LibFlacError>
         let sample_size = FLAC__stream_decoder_get_bits_per_sample(decoder);
         let sample_rate = FLAC__stream_decoder_get_sample_rate(decoder);
         let length = FLAC__stream_decoder_get_total_samples(decoder);
+        cb_data.meta.as_mut().unwrap().sample_rate = sample_rate;
         if length == 0 {
-            debug!("got FLAC stream info: {} channels, {} bits, {} hz, length unknown", num_channels, sample_size, sample_rate);
+            cb_data.meta.as_mut().unwrap().num_samples = Some(length);
+            debug!("stream info: {} channels, {} bits, {} hz, length unknown", num_channels, sample_size, sample_rate);
         } else {
-            debug!("got FLAC stream info: {} channels, {} bits, {} hz, {} samples", num_channels, sample_size, sample_rate, length);
+            debug!("stream info: {} channels, {} bits, {} hz, {} samples", num_channels, sample_size, sample_rate, length);
         }
+        assert_ne!(0, cb_data.meta.as_mut().unwrap().sample_rate);
 
         macro_rules! dyn_type {
             ($dyn:path) => {
@@ -94,7 +102,8 @@ pub fn decode<R>(input: R) -> Result<dyn::Audio, LibFlacError>
                 })).into()
             }
         }
-        Ok(match (length != 0, num_channels, sample_size) {
+        let meta = cb_data.meta.take().unwrap();
+        Ok((match (length != 0, num_channels, sample_size) {
             (false, 1, 8)  => dyn_type!(dyn::Source::MonoI8),
             (false, 1, 16) => dyn_type!(dyn::Source::MonoI16),
             (false, 1, 24) => dyn_type!(dyn::Source::MonoI24),
@@ -108,11 +117,11 @@ pub fn decode<R>(input: R) -> Result<dyn::Audio, LibFlacError>
             (true, 2, 16) => dyn_type!(dyn::Seek::StereoI16),
             (true, 2, 24) => dyn_type!(dyn::Seek::StereoI24),
             (kl, nc, ss) => return Err(LibFlacError::Unimplemented {
-                known_length: length != 0,
+                known_length: kl,
                 num_channels: nc,
                 sample_size: ss,
             }),
-        })
+        }, meta))
     }
 }
 
@@ -323,6 +332,44 @@ unsafe extern "C" fn eof_cb<R>(_: *const FLAC__StreamDecoder, client_data: *mut 
     }
 }
 
+unsafe extern "C" fn metadata_cb<R>(_: *const FLAC__StreamDecoder, metadata: *const FLAC__StreamMetadata, client_data: *mut os::raw::c_void)
+    where R: io::Read + io::Seek + SeekExt {
+    let mut data = (client_data as *mut DecoderCallbackData<R>).as_mut().unwrap();
+    match (*metadata).type_ {
+        FLAC__METADATA_TYPE_VORBIS_COMMENT => {
+            let comment = (*metadata).data.vorbis_comment.as_ref();
+            let strings = slice::from_raw_parts(comment.comments, comment.num_comments as usize)
+                .iter()
+                .filter_map(|c| entry_as_str(c))
+                .filter_map(|s| s.find('=').map(|i| (s, i)))
+                .filter(|&(ref s, ref i)| s[*i..].trim().len() > 0);
+            let mut meta = match data.meta.as_mut() {
+                Some(meta) => meta,
+                None => {
+                    warn!("Vorbis Comment encountered after initialisation");
+                    return;
+                },
+            };
+            for (s, i) in strings {
+                let (key, value) = s.split_at(i);
+                let value = value[1..].trim();
+                meta.tags.insert(key.to_lowercase().replace(&[' ', '_'][..], ""), value.into());
+            }
+        },
+        _ => (),
+    }
+}
+
+unsafe fn entry_as_str<'a>(entry: &'a FLAC__StreamMetadata_VorbisComment_Entry) -> Option<Cow<'a, str>> {
+    if entry.length == 0 {
+        return None;
+    }
+    let bytes = slice::from_raw_parts(entry.entry, entry.length as usize + 1);
+    ffi::CStr::from_bytes_with_nul(bytes)
+        .ok()
+        .map(|cs| cs.to_string_lossy())
+}
+
 
 pub trait SeekExt: io::Read + io::Seek {
     fn length(&mut self) -> Result<u64, ()>;
@@ -406,5 +453,31 @@ impl error::Error for LibFlacError {
 impl From<io::Error> for LibFlacError {
     fn from(err: io::Error) -> LibFlacError {
         LibFlacError::IO(err)
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    const testfile: &'static str = "testdata/Various Artists - Dark Sine of the Moon/01 - The B-Trees - Lucy in the Cloud with Sine Waves.flac";
+
+    #[test]
+    fn read_file() {
+        let (audio, _) = open(path::Path::new(testfile)).unwrap();
+        assert!(audio.is_seek());
+        assert_eq!(44100, audio.sample_rate());
+    }
+
+    #[test]
+    fn metadata() {
+        let (_, meta) = open(path::Path::new(testfile)).unwrap();
+        assert_eq!(44100, meta.sample_rate);
+        assert_ne!(Some(0), meta.num_samples);
+        assert!(meta.tags.values().any(|v| v == "Lucy in the Cloud with Sine Waves"));
+        assert!(meta.tags.values().any(|v| v == "The B-Trees"));
+        assert!(meta.tags.values().any(|v| v == "Dark Sine of the Moon"));
+        assert!(meta.tags.values().any(|v| v == "1984"));
+        assert!(meta.tags.values().any(|v| v == "Various Artists"));
     }
 }
