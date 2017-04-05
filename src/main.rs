@@ -25,7 +25,7 @@ fn main() {
         .map(path::PathBuf::from)
         .expect("$1 should be an audio file");
 
-    let (dyn_input, _) = format::flac::open(&filename).unwrap();
+    let (dyn_input, _) = format::decode_file(&filename).unwrap();
     assert!(dyn_input.is_seek());
     let mut pb = player::Playback::new(dyn_input, &player::output::pulse::Output{});
     pb.set_playstate(player::State::Playing);

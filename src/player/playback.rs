@@ -231,9 +231,7 @@ impl Playback {
     pub fn duration_time(&self) -> Option<time::Duration> {
         self.duration()
             .map(|num_samples| {
-                let secs = num_samples / self.sample_rate as u64;
-                let nanos = (num_samples as u32 % self.sample_rate) * (1_000_000_000 / self.sample_rate);
-                time::Duration::new(secs, nanos)
+                duration_of(self.sample_rate, num_samples)
             })
     }
 
@@ -262,10 +260,7 @@ impl Playback {
 
     /// Returns the current position as a Duration.
     pub fn position_time(&self) -> time::Duration {
-        let pos = self.position();
-        let secs = pos / self.sample_rate as u64;
-        let nanos = (pos % self.sample_rate as u64) * (1_000_000_000 / self.sample_rate as u64);
-        time::Duration::new(secs, nanos as u32)
+        duration_of(self.sample_rate, self.position())
     }
 
     pub fn playstate(&self) -> State {

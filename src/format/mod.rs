@@ -1,6 +1,27 @@
+use std::*;
+use std::io::{Read, Seek};
 use std::collections::HashMap;
+use ::audio::*;
 
 pub mod flac;
+
+
+pub fn decode_file(path: &path::Path) -> Result<(dyn::Audio, Metadata), Error> {
+    debug!("opening {} for decoding", path.to_string_lossy());
+
+    let mut buf = [0; 512];
+    let mut file = fs::File::open(path)?;
+    let nread = file.read(&mut buf)?;
+    file.seek(io::SeekFrom::Start(0))?;
+
+    let header = &buf[..nread];
+    if header.starts_with(flac::MAGIC) {
+        return Ok(flac::decode(file)?);
+    }
+
+    Err(Error::Unsupported)
+}
+
 
 #[derive(Debug, Clone)]
 pub struct Metadata {
@@ -20,5 +41,54 @@ impl Metadata {
             num_samples: None,
             tags: HashMap::new(),
         }
+    }
+}
+
+
+#[derive(Debug)]
+pub enum Error {
+    Unsupported,
+    IO(io::Error),
+    Flac(flac::Error),
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            Error::Unsupported => {
+                write!(f, "Format unsupported")
+            },
+            Error::IO(ref err) => {
+                write!(f, "IO: {}", err)
+            },
+            Error::Flac(ref err) => {
+                write!(f, "Flac: {}", err)
+            },
+        }
+    }
+}
+
+impl error::Error for Error {
+    fn description(&self) -> &str {
+        "Decoder error"
+    }
+
+    fn cause(&self) -> Option<&error::Error> {
+        match *self {
+            Error::Flac(ref err) => Some(err),
+            _ => None,
+        }
+    }
+}
+
+impl From<io::Error> for Error {
+    fn from(err: io::Error) -> Error {
+        Error::IO(err)
+    }
+}
+
+impl From<flac::Error> for Error {
+    fn from(err: flac::Error) -> Error {
+        Error::Flac(err)
     }
 }

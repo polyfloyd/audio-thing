@@ -69,6 +69,13 @@ impl error::Error for SeekError {
 }
 
 
+pub fn duration_of(sample_rate: u32, num_samples: u64) -> time::Duration {
+    let secs = num_samples / sample_rate as u64;
+    let nanos = (num_samples as u32 % sample_rate) * (1_000_000_000 / sample_rate);
+    time::Duration::new(secs, nanos)
+}
+
+
 pub trait Sink<F>
     where F: sample::Frame {
     fn write_frame(&mut self, frame: F) -> Result<(), Box<error::Error>>;

@@ -7,6 +7,9 @@ use ::audio::*;
 use ::format;
 
 
+pub const MAGIC: &'static [u8] = b"fLaC";
+
+
 struct Decoder<F, R>
     where F: sample::Frame,
           F::Sample: DecodeSample,
@@ -29,17 +32,12 @@ struct DecoderCallbackData<R> {
     meta: Option<format::Metadata>,
 }
 
-pub fn open(filename: &path::Path) -> Result<(dyn::Audio, format::Metadata), LibFlacError> {
-    debug!("opening {} for reading", filename.to_string_lossy());
-    decode(fs::File::open(filename)?)
-}
-
-pub fn decode<R>(input: R) -> Result<(dyn::Audio, format::Metadata), LibFlacError>
+pub fn decode<R>(input: R) -> Result<(dyn::Audio, format::Metadata), Error>
     where R: io::Read + io::Seek + SeekExt + 'static {
     unsafe {
         let decoder = FLAC__stream_decoder_new();
         if decoder.is_null() {
-            return Err(LibFlacError::ConstructionFailed);
+            return Err(Error::ConstructionFailed);
         }
 
         let mut cb_data = Box::new(DecoderCallbackData{
@@ -63,18 +61,18 @@ pub fn decode<R>(input: R) -> Result<(dyn::Audio, format::Metadata), LibFlacErro
         );
         if init_status != FLAC__StreamDecoderInitStatus::FLAC__STREAM_DECODER_INIT_STATUS_OK {
             FLAC__stream_decoder_delete(decoder);
-            return Err(LibFlacError::InitFailed(init_status));
+            return Err(Error::InitFailed(init_status));
         }
 
         if FLAC__stream_decoder_process_until_end_of_metadata(decoder) != 1 {
             let state = FLAC__stream_decoder_get_state(decoder);
             FLAC__stream_decoder_delete(decoder);
-            return Err(LibFlacError::BadState(state));
+            return Err(Error::BadState(state));
         }
         if FLAC__stream_decoder_process_single(decoder) != 1 {
             let state = FLAC__stream_decoder_get_state(decoder);
             FLAC__stream_decoder_delete(decoder);
-            return Err(LibFlacError::BadState(state));
+            return Err(Error::BadState(state));
         }
 
         let num_channels = FLAC__stream_decoder_get_channels(decoder);
@@ -116,7 +114,7 @@ pub fn decode<R>(input: R) -> Result<(dyn::Audio, format::Metadata), LibFlacErro
             (true, 2, 8) => dyn_type!(dyn::Seek::StereoI8),
             (true, 2, 16) => dyn_type!(dyn::Seek::StereoI16),
             (true, 2, 24) => dyn_type!(dyn::Seek::StereoI24),
-            (kl, nc, ss) => return Err(LibFlacError::Unimplemented {
+            (kl, nc, ss) => return Err(Error::Unimplemented {
                 known_length: kl,
                 num_channels: nc,
                 sample_size: ss,
@@ -137,7 +135,7 @@ impl<F, R> iter::Iterator for Decoder<F, R>
                 if FLAC__stream_decoder_process_single(self.decoder) != 1 {
                     let state = FLAC__stream_decoder_get_state(self.decoder);
                     if state != FLAC__STREAM_DECODER_END_OF_STREAM {
-                        error!("{}", LibFlacError::BadState(state));
+                        error!("{}", Error::BadState(state));
                     }
                     return None;
                 }
@@ -191,7 +189,7 @@ impl<F, R> Seekable for Decoder<F, R>
         unsafe {
             if FLAC__stream_decoder_seek_absolute(self.decoder, abs_pos as u64) != 1 {
                 let state = FLAC__stream_decoder_get_state(self.decoder);
-                return Err(SeekError::Other(Box::from(LibFlacError::BadState(state))));
+                return Err(SeekError::Other(Box::from(Error::BadState(state))));
             }
         }
         self.current_sample = 0;
@@ -399,7 +397,7 @@ impl SeekExt for fs::File {
 
 
 #[derive(Debug)]
-pub enum LibFlacError {
+pub enum Error {
     IO(io::Error),
     ConstructionFailed,
     InitFailed(FLAC__StreamDecoderInitStatus),
@@ -411,48 +409,48 @@ pub enum LibFlacError {
     },
 }
 
-impl fmt::Display for LibFlacError {
+impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            LibFlacError::IO(ref err) => {
+            Error::IO(ref err) => {
                 write!(f, "IO: {}", err)
             },
-            LibFlacError::ConstructionFailed => {
+            Error::ConstructionFailed => {
                 write!(f, "Failed to construct decoder")
             },
-            LibFlacError::InitFailed(status) => unsafe {
+            Error::InitFailed(status) => unsafe {
                 let s = FLAC__StreamDecoderInitStatusString.offset(status as isize);
                 let errstr = ffi::CStr::from_ptr(*s);
                 write!(f, "Flac init failed: {}", errstr.to_str().unwrap())
             },
-            LibFlacError::BadState(state) => unsafe {
+            Error::BadState(state) => unsafe {
                 let s = FLAC__StreamDecoderStateString.offset(state as isize);
                 let errstr = ffi::CStr::from_ptr(*s);
                 write!(f, "Flac bad state: {}", errstr.to_str().unwrap())
             },
-            LibFlacError::Unimplemented{ known_length: kl, num_channels: nc, sample_size: ss } => {
+            Error::Unimplemented{ known_length: kl, num_channels: nc, sample_size: ss } => {
                 write!(f, "Flac format not implemented: {} channels, {} bits, finite: {}", nc, ss, kl)
             },
         }
     }
 }
 
-impl error::Error for LibFlacError {
+impl error::Error for Error {
     fn description(&self) -> &str {
         "Flac error"
     }
 
     fn cause(&self) -> Option<&error::Error> {
         match *self {
-            LibFlacError::IO(ref err) => Some(err),
+            Error::IO(ref err) => Some(err),
             _ => None,
         }
     }
 }
 
-impl From<io::Error> for LibFlacError {
-    fn from(err: io::Error) -> LibFlacError {
-        LibFlacError::IO(err)
+impl From<io::Error> for Error {
+    fn from(err: io::Error) -> Error {
+        Error::IO(err)
     }
 }
 
@@ -464,14 +462,14 @@ mod tests {
 
     #[test]
     fn read_file() {
-        let (audio, _) = open(path::Path::new(testfile)).unwrap();
+        let (audio, _) = decode(fs::File::open(path::Path::new(testfile)).unwrap()).unwrap();
         assert!(audio.is_seek());
         assert_eq!(44100, audio.sample_rate());
     }
 
     #[test]
     fn metadata() {
-        let (_, meta) = open(path::Path::new(testfile)).unwrap();
+        let (_, meta) = decode(fs::File::open(path::Path::new(testfile)).unwrap()).unwrap();
         assert_eq!(44100, meta.sample_rate);
         assert_ne!(Some(0), meta.num_samples);
         assert!(meta.tags.values().any(|v| v == "Lucy in the Cloud with Sine Waves"));
