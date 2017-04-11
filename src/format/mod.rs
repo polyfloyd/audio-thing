@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use ::audio::*;
 
 pub mod flac;
+pub mod wave;
 
 
 pub fn decode_file(path: &path::Path) -> Result<(dyn::Audio, Metadata), Error> {
@@ -17,6 +18,8 @@ pub fn decode_file(path: &path::Path) -> Result<(dyn::Audio, Metadata), Error> {
     let header = &buf[..nread];
     if header.starts_with(flac::MAGIC) {
         return Ok(flac::decode(file)?);
+    } else if wave::magic().is_match(&header) {
+        return Ok(wave::decode(file)?);
     }
 
     Err(Error::Unsupported)
@@ -50,6 +53,7 @@ pub enum Error {
     Unsupported,
     IO(io::Error),
     Flac(flac::Error),
+    Wave(wave::Error),
 }
 
 impl fmt::Display for Error {
@@ -64,6 +68,9 @@ impl fmt::Display for Error {
             Error::Flac(ref err) => {
                 write!(f, "Flac: {}", err)
             },
+            Error::Wave(ref err) => {
+                write!(f, "Wave: {}", err)
+            },
         }
     }
 }
@@ -76,6 +83,7 @@ impl error::Error for Error {
     fn cause(&self) -> Option<&error::Error> {
         match *self {
             Error::Flac(ref err) => Some(err),
+            Error::Wave(ref err) => Some(err),
             _ => None,
         }
     }
@@ -90,5 +98,11 @@ impl From<io::Error> for Error {
 impl From<flac::Error> for Error {
     fn from(err: flac::Error) -> Error {
         Error::Flac(err)
+    }
+}
+
+impl From<wave::Error> for Error {
+    fn from(err: wave::Error) -> Error {
+        Error::Wave(err)
     }
 }

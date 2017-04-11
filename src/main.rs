@@ -1,7 +1,11 @@
 extern crate badlog;
+extern crate byteorder;
 extern crate dft;
 #[macro_use]
+extern crate lazy_static;
+#[macro_use]
 extern crate log;
+extern crate regex;
 extern crate sample;
 extern crate libflac_sys;
 extern crate libpulse_sys;

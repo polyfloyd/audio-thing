@@ -1,0 +1,340 @@
+use std::*;
+use std::collections::HashMap;
+use byteorder::{ByteOrder, BigEndian, LittleEndian};
+use regex::bytes;
+use sample::{self, I24};
+use ::audio::*;
+use ::format;
+
+
+pub fn magic() -> &'static bytes::Regex {
+    lazy_static! {
+        static ref MAGIC: bytes::Regex = bytes::Regex::new(r"(?s-u)RIF(F|X)....WAVE").unwrap();
+    }
+    &MAGIC
+}
+
+
+#[derive(Copy, Clone, Debug)]
+pub enum Endianness {
+    Big,
+    Little,
+}
+
+#[derive(Copy, Clone, Debug)]
+enum Format {
+    Int,
+    Float,
+}
+
+
+pub fn decode<R>(mut input: R) -> Result<(dyn::Audio, format::Metadata), Error>
+    where R: io::Read + io::Seek + Send + 'static {
+    // Read the file header.
+    let mut file_header = [0; 12];
+    input.read_exact(&mut file_header)?;
+    let endianness = magic().captures(&file_header)
+        .and_then(|cap| cap.get(1))
+        .and_then(|m| match m.as_bytes() {
+            b"F" => Some(Endianness::Little),
+            b"X" => Some(Endianness::Big),
+            _ => None,
+        })
+        .ok_or(Error::FormatError)?;
+
+    struct FmtChunk {
+        audio_format: u16,
+        num_channels: u16,
+        sample_rate: u32,
+        block_align: u16,
+        sample_size: u16,
+    }
+    let mut fmt = None;
+    let data_range;
+
+    // Read chunks until we're at the PCM data.
+    loop {
+        let mut sub_header = [0; 8];
+        input.read_exact(&mut sub_header)?;
+        let sub_size = LittleEndian::read_u32(&sub_header[4..8]) as u64;
+        let chunk_data_start = input.seek(io::SeekFrom::Current(0))? as u64;
+
+        match &sub_header[0..4] {
+            b"fmt " => {
+                let mut buf = [0; 16];
+                input.read_exact(&mut buf)?;
+                fmt = Some(FmtChunk {
+                    audio_format: LittleEndian::read_u16(&buf[0..2]),
+                    num_channels: LittleEndian::read_u16(&buf[2..4]),
+                    sample_rate: LittleEndian::read_u32(&buf[4..8]),
+                    // 8..12 = byte_rate
+                    block_align: LittleEndian::read_u16(&buf[12..14]),
+                    sample_size: LittleEndian::read_u16(&buf[14..16]),
+                });
+            },
+
+            b"data" => {
+                let start = input.seek(io::SeekFrom::Current(0))?;
+                data_range = start .. start + sub_size;
+                break;
+            },
+
+            // A padding chunk is used to reserve space for a future info chunk so the data
+            // chunk does not have to be moved.
+            b"PAD " => (),
+
+            id => warn!("unknown chunk id: {}", String::from_utf8_lossy(id)),
+        };
+
+        input.seek(io::SeekFrom::Start(chunk_data_start + sub_size))?;
+    }
+
+    let fmt = fmt.ok_or(Error::FormatError)?;
+    if fmt.block_align != fmt.num_channels * fmt.sample_size / 8 {
+        error!("mismatch: block_align: {}, num_channels * sample_size: {}", fmt.block_align, fmt.num_channels * fmt.sample_size / 8);
+        return Err(Error::FormatError);
+    }
+    let audio_format = match fmt.audio_format {
+        1 => Format::Int,
+        3 => Format::Float,
+        _ => return Err(Error::Unsupported),
+    };
+    input.seek(io::SeekFrom::Start(data_range.start))?;
+
+    debug!("{} channels, {} bits, {} hz, endianness: {:?}", fmt.num_channels, fmt.sample_size, fmt.sample_rate, endianness);
+
+    let meta = format::Metadata {
+        sample_rate: fmt.sample_rate,
+        num_samples: Some((data_range.end - data_range.start) / (fmt.num_channels * fmt.sample_size / 8) as u64),
+        tags: HashMap::new(),
+    };
+
+    macro_rules! dyn_type {
+        ($dyn:path, $end:path) => {
+            $dyn(Box::from(Decoder::<_, _, $end> {
+                input: input,
+                data_range: data_range,
+                sample_rate: fmt.sample_rate,
+                num_channels: fmt.num_channels as usize,
+                bytes_per_sample: fmt.sample_size as usize / 8,
+                next_sample: 0,
+                ph_f: marker::PhantomData,
+                ph_b: marker::PhantomData,
+            })).into()
+        }
+    }
+    Ok((match (fmt.num_channels, fmt.sample_size, audio_format, endianness) {
+        (1, 8 , Format::Int,   Endianness::Little) => dyn_type!(dyn::Seek::MonoU8, LittleEndian),
+        (1, 16, Format::Int,   Endianness::Little) => dyn_type!(dyn::Seek::MonoI16, LittleEndian),
+        (1, 24, Format::Int,   Endianness::Little) => dyn_type!(dyn::Seek::MonoI24, LittleEndian),
+        (1, 32, Format::Float, Endianness::Little) => dyn_type!(dyn::Seek::MonoF32, LittleEndian),
+        (2, 8 , Format::Int,   Endianness::Little) => dyn_type!(dyn::Seek::StereoU8, LittleEndian),
+        (2, 16, Format::Int,   Endianness::Little) => dyn_type!(dyn::Seek::StereoI16, LittleEndian),
+        (2, 24, Format::Int,   Endianness::Little) => dyn_type!(dyn::Seek::StereoI24, LittleEndian),
+        (2, 32, Format::Float, Endianness::Little) => dyn_type!(dyn::Seek::StereoF32, LittleEndian),
+        (nc, ss, _, end) => return Err(Error::Unimplemented {
+            endianness: end,
+            num_channels: nc,
+            sample_size: ss,
+        }),
+    }, meta))
+}
+
+struct Decoder<R, F, B>
+    where R: io::Read + io::Seek,
+          F: sample::Frame,
+          F::Sample: DecodeSample<B>,
+          B: ByteOrder {
+    input: R,
+    /// Position of the first PCM byte in the file.
+    data_range: ops::Range<u64>,
+
+    sample_rate: u32,
+    num_channels: usize,
+    bytes_per_sample: usize,
+
+    next_sample: u64,
+
+    ph_f: marker::PhantomData<F>,
+    ph_b: marker::PhantomData<B>,
+}
+
+impl<R, F, B> iter::Iterator for Decoder<R, F, B>
+    where R: io::Read + io::Seek,
+          F: sample::Frame,
+          F::Sample: DecodeSample<B>,
+          B: ByteOrder {
+    type Item = F;
+    fn next(&mut self) -> Option<Self::Item> {
+        let fpos = match self.input.seek(io::SeekFrom::Current(0)) {
+            Ok(fpos) => fpos,
+            Err(err) => {
+                error!("error getting position: {}", err);
+                return None;
+            },
+        };
+        if fpos < self.data_range.start || self.data_range.end <= fpos {
+            return None;
+        }
+
+        let mut buf = vec![0; self.num_channels * self.bytes_per_sample];
+        match self.input.read(&mut buf) {
+            Ok(nread) if nread != buf.len() => {
+                return None;
+            },
+            Err(err) => {
+                error!("error reading sample: {}", err);
+                return None;
+            },
+            _ => (),
+        };
+
+        self.next_sample = (fpos - self.data_range.start) / (self.num_channels * self.bytes_per_sample) as u64 + 1;
+
+        Some(F::from_fn(|channel| {
+            let offset = channel * self.bytes_per_sample;
+            F::Sample::decode(&buf[offset..])
+        }))
+    }
+}
+
+impl<R, F, B> Source for Decoder<R, F, B>
+    where R: io::Read + io::Seek,
+          F: sample::Frame,
+          F::Sample: DecodeSample<B>,
+          B: ByteOrder {
+    fn sample_rate(&self) -> u32 {
+        self.sample_rate
+    }
+}
+
+
+impl<R, F, B> Seekable for Decoder<R, F, B>
+    where R: io::Read + io::Seek,
+          F: sample::Frame,
+          F::Sample: DecodeSample<B>,
+          B: ByteOrder {
+    fn seek(&mut self, pos: io::SeekFrom) -> Result<u64, SeekError> {
+        let abs_pos = match pos {
+            io::SeekFrom::Start(i) => i as i64,
+            io::SeekFrom::End(i) => (self.length() as i64 + i),
+            io::SeekFrom::Current(i) => (self.current_position() as i64 + i),
+        };
+        if abs_pos < 0 || abs_pos >= self.length() as i64 {
+            return Err(SeekError::OutofRange{
+                pos: abs_pos,
+                size: self.length(),
+            });
+        }
+
+        let fpos = self.data_range.start + abs_pos as u64 * (self.num_channels * self.bytes_per_sample) as u64;
+        self.input.seek(io::SeekFrom::Start(fpos))
+            .map_err(|err| SeekError::Other(Box::from(err)))?;
+        self.next_sample = abs_pos as u64;
+        Ok(self.next_sample)
+    }
+
+    fn length(&self) -> u64 {
+        (self.data_range.end - self.data_range.start)
+            / (self.num_channels * self.bytes_per_sample) as u64
+    }
+
+    fn current_position(&self) -> u64 {
+        self.next_sample
+    }
+}
+
+impl<R, F, B> Seek for Decoder<R, F, B>
+    where R: io::Read + io::Seek,
+          F: sample::Frame,
+          F::Sample: DecodeSample<B>,
+          B: ByteOrder { }
+
+
+trait DecodeSample<B>: sample::Sample
+    where B: ByteOrder {
+    fn decode(buf: &[u8]) -> Self;
+}
+
+impl<B> DecodeSample<B> for u8
+    where B: ByteOrder {
+    fn decode(buf: &[u8]) -> u8 { buf[0] }
+}
+
+impl<B> DecodeSample<B> for i16
+    where B: ByteOrder {
+    fn decode(buf: &[u8]) -> i16 { B::read_i16(buf) }
+}
+
+impl DecodeSample<BigEndian> for I24 {
+    fn decode(buf: &[u8]) -> I24 {
+        I24::new_unchecked((buf[2] as i32) | (buf[1] as i32) << 8 | (buf[0] as i32) << 16)
+    }
+}
+
+impl DecodeSample<LittleEndian> for I24 {
+    fn decode(buf: &[u8]) -> I24 {
+        I24::new_unchecked((buf[0] as i32) | (buf[1] as i32) << 8 | (buf[2] as i32) << 16)
+    }
+}
+
+impl<B> DecodeSample<B> for f32
+    where B: ByteOrder {
+    fn decode(buf: &[u8]) -> f32 { B::read_f32(buf) }
+}
+
+
+#[derive(Debug)]
+pub enum Error {
+    IO(io::Error),
+    FormatError,
+    Unimplemented{
+        endianness: Endianness,
+        num_channels: u16,
+        sample_size: u16,
+    },
+    Unsupported,
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            Error::IO(ref err) => {
+                write!(f, "IO: {}", err)
+            },
+            Error::FormatError => {
+                write!(f, "Format error")
+            },
+            Error::Unimplemented{ endianness, num_channels, sample_size } => {
+                write!(f,
+                    "Wave format not implemented: {} channels, {} bits, endianness: {:?}",
+                    num_channels,
+                    sample_size,
+                    endianness,
+                )
+            },
+            Error::Unsupported => {
+                write!(f, "Non PCM formats are unsupported")
+            },
+        }
+    }
+}
+
+impl error::Error for Error {
+    fn description(&self) -> &str {
+        "Wave error"
+    }
+
+    fn cause(&self) -> Option<&error::Error> {
+        match *self {
+            Error::IO(ref err) => Some(err),
+            _ => None,
+        }
+    }
+}
+
+impl From<io::Error> for Error {
+    fn from(err: io::Error) -> Error {
+        Error::IO(err)
+    }
+}
