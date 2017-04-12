@@ -1,6 +1,7 @@
 use std::*;
 use std::collections::HashMap;
 use byteorder::{ByteOrder, BigEndian, LittleEndian};
+use id3;
 use regex::bytes;
 use sample::{self, I24};
 use ::audio::*;
@@ -50,14 +51,14 @@ pub fn decode<R>(mut input: R) -> Result<(dyn::Audio, format::Metadata), Error>
         sample_size: u16,
     }
     let mut fmt = None;
-    let data_range;
+    let mut tags = None;
+    let mut data_range = None;
 
-    // Read chunks until we're at the PCM data.
-    loop {
-        let mut sub_header = [0; 8];
-        input.read_exact(&mut sub_header)?;
+    // Read all chunks in the file until we reach the end.
+    let mut sub_header = [0; 8];
+    while input.read_exact(&mut sub_header).is_ok() {
         let sub_size = LittleEndian::read_u32(&sub_header[4..8]) as u64;
-        let chunk_data_start = input.seek(io::SeekFrom::Current(0))? as u64;
+        let sub_data_start = input.seek(io::SeekFrom::Current(0))? as u64;
 
         match &sub_header[0..4] {
             b"fmt " => {
@@ -73,23 +74,33 @@ pub fn decode<R>(mut input: R) -> Result<(dyn::Audio, format::Metadata), Error>
                 });
             },
 
-            b"data" => {
-                let start = input.seek(io::SeekFrom::Current(0))?;
-                data_range = start .. start + sub_size;
-                break;
+            b"id3 " => {
+                let id3_tag = id3::Tag::read_from(&mut input)?;
+                tags = Some(format::tags_from_id3(id3_tag));
             },
 
-            // A padding chunk is used to reserve space for a future info chunk so the data
-            // chunk does not have to be moved.
+            b"data" => {
+                data_range = Some(sub_data_start .. sub_data_start + sub_size);
+            },
+
+            // Broadcast Audio Extension Chunk (BWF). Unimplemented.
+            b"bext" => (),
+
+            // Some kind of metadata added by Logic Pro. Unimplemented.
+            b"LGWV" => (),
+
+            // A padding chunk is used to reserve space for a future chunk so the data chunk does
+            // not have to be moved.
             b"PAD " => (),
 
             id => warn!("unknown chunk id: {}", String::from_utf8_lossy(id)),
         };
 
-        input.seek(io::SeekFrom::Start(chunk_data_start + sub_size))?;
+        input.seek(io::SeekFrom::Start(sub_data_start + sub_size))?;
     }
 
     let fmt = fmt.ok_or(Error::FormatError)?;
+    let data_range = data_range.ok_or(Error::FormatError)?;
     if fmt.block_align != fmt.num_channels * fmt.sample_size / 8 {
         error!("mismatch: block_align: {}, num_channels * sample_size: {}", fmt.block_align, fmt.num_channels * fmt.sample_size / 8);
         return Err(Error::FormatError);
@@ -106,7 +117,7 @@ pub fn decode<R>(mut input: R) -> Result<(dyn::Audio, format::Metadata), Error>
     let meta = format::Metadata {
         sample_rate: fmt.sample_rate,
         num_samples: Some((data_range.end - data_range.start) / (fmt.num_channels * fmt.sample_size / 8) as u64),
-        tags: HashMap::new(),
+        tags: tags.unwrap_or_else(HashMap::new),
     };
 
     macro_rules! dyn_type {
@@ -287,6 +298,7 @@ impl<B> DecodeSample<B> for f32
 #[derive(Debug)]
 pub enum Error {
     IO(io::Error),
+    ID3(id3::Error),
     FormatError,
     Unimplemented{
         endianness: Endianness,
@@ -301,6 +313,9 @@ impl fmt::Display for Error {
         match *self {
             Error::IO(ref err) => {
                 write!(f, "IO: {}", err)
+            },
+            Error::ID3(ref err) => {
+                write!(f, "ID3: {}", err)
             },
             Error::FormatError => {
                 write!(f, "Format error")
@@ -328,6 +343,7 @@ impl error::Error for Error {
     fn cause(&self) -> Option<&error::Error> {
         match *self {
             Error::IO(ref err) => Some(err),
+            Error::ID3(ref err) => Some(err),
             _ => None,
         }
     }
@@ -336,5 +352,11 @@ impl error::Error for Error {
 impl From<io::Error> for Error {
     fn from(err: io::Error) -> Error {
         Error::IO(err)
+    }
+}
+
+impl From<id3::Error> for Error {
+    fn from(err: id3::Error) -> Error {
+        Error::ID3(err)
     }
 }

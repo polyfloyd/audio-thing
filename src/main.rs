@@ -1,6 +1,7 @@
 extern crate badlog;
 extern crate byteorder;
 extern crate dft;
+extern crate id3;
 #[macro_use]
 extern crate lazy_static;
 #[macro_use]

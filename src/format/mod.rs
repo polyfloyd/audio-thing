@@ -1,6 +1,8 @@
 use std::*;
-use std::io::{Read, Seek};
 use std::collections::HashMap;
+use std::io::{Read, Seek};
+use std::iter::FromIterator;
+use id3;
 use ::audio::*;
 
 pub mod flac;
@@ -34,7 +36,31 @@ pub struct Metadata {
     /// There seems to be no real standard for music tags, so all other tags read by decoders
     /// should thrown in this hashmap.
     /// Decoders should restrict keys to lowercase alphanumeric characters.
+    ///
+    /// NOTE: An id3 tag is probably better than this hashmap, so this might change sometime.
     pub tags: HashMap<String, String>,
+}
+
+/// Copies the `Metadata` tags from an ID3 tag.
+fn tags_from_id3(tag: id3::Tag) -> HashMap<String, String> {
+    let t = tag.frames()
+        .iter()
+        .filter_map(|frame| {
+            let key = match frame.id.as_str() {
+                "TPE1"|"TPE2" => "artist",
+                "TIT2" => "title",
+                "TCON" => "genre",
+                "COMM" => "comment",
+                _ => return None, // TODO: More ids
+            };
+            let value = match frame.content {
+                id3::frame::Content::Text(ref s) => s,
+                id3::frame::Content::Link(ref s) => s,
+                _ => return None,
+            };
+            Some((key.to_string(), value.to_string()))
+        });
+    HashMap::from_iter(t)
 }
 
 impl Metadata {
