@@ -1,5 +1,6 @@
 use std::*;
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::ops::DerefMut;
 use libflac_sys::*;
 use sample::{self, I24};
@@ -43,7 +44,11 @@ pub fn decode<R>(input: R) -> Result<(dyn::Audio, format::Metadata), Error>
         let mut cb_data = Box::new(DecoderCallbackData{
             input: input,
             current_block: None,
-            meta: Some(format::Metadata::new()),
+            meta: Some(format::Metadata {
+                sample_rate: 0,
+                num_samples: None,
+                tags: HashMap::new(),
+            }),
         });
 
         assert!(FLAC__stream_decoder_set_metadata_respond_all(decoder) == 1);

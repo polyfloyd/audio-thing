@@ -63,16 +63,6 @@ fn tags_from_id3(tag: id3::Tag) -> HashMap<String, String> {
     HashMap::from_iter(t)
 }
 
-impl Metadata {
-    fn new() -> Metadata {
-        Metadata {
-            sample_rate: 0,
-            num_samples: None,
-            tags: HashMap::new(),
-        }
-    }
-}
-
 
 #[derive(Debug)]
 pub enum Error {
