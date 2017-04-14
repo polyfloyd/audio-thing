@@ -16,6 +16,7 @@ use std::io::BufRead;
 mod audio;
 mod filter;
 mod format;
+mod library;
 mod player;
 mod pulse;
 
