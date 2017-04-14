@@ -69,7 +69,7 @@ impl Ord for Release {
 }
 
 impl str::FromStr for Release {
-    type Err = ParseError; // TODO
+    type Err = ParseError;
     fn from_str(s: &str) -> Result<Release, ParseError> {
         lazy_static! {
             static ref DATE_LE: Regex = Regex::new(r"(?x)
