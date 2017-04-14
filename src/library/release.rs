@@ -1,4 +1,6 @@
 use std::*;
+use rusqlite as sqlite;
+use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, Value, ValueRef};
 use regex::Regex;
 
 
@@ -128,6 +130,25 @@ impl str::FromStr for Release {
             })
             .map(|r| Ok(r))
             .unwrap_or(Err(ParseError::Unmatched))
+    }
+}
+
+impl ToSql for Release {
+    fn to_sql(&self) -> Result<ToSqlOutput, sqlite::Error> {
+        let s = match *self {
+            Release::Year{ year } => format!("{:04}", year),
+            Release::Month{ year, month } => format!("{:04}-{:02}", year, month),
+            Release::Day{ year, month, day } => format!("{:04}-{:02}-{:02}", year, month, day),
+        };
+        Ok(ToSqlOutput::Owned(Value::Text(s)))
+    }
+}
+
+impl FromSql for Release {
+    fn column_result(value: ValueRef) -> FromSqlResult<Release> {
+        value.as_str()?
+            .parse()
+            .map_err(|err| FromSqlError::Other(Box::from(err)))
     }
 }
 

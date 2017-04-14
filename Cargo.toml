@@ -10,7 +10,10 @@ dft = "*"
 id3 = "*"
 lazy_static = "*"
 log = "*"
+notify = "*"
 regex = "*"
+rusqlite = { version = "*", features = [ "functions" ] }
 sample = "*"
+xdg = "*"
 libflac_sys = { version = "^1.3.2", path = "libflac_sys" }
 libpulse_sys = { version = "^10.0.0", path = "libpulse_sys" }

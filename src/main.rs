@@ -6,8 +6,11 @@ extern crate id3;
 extern crate lazy_static;
 #[macro_use]
 extern crate log;
+extern crate notify;
 extern crate regex;
+extern crate rusqlite;
 extern crate sample;
+extern crate xdg;
 extern crate libflac_sys;
 extern crate libpulse_sys;
 use std::*;

@@ -1,6 +1,7 @@
 use std::*;
 use ::audio::*;
 
+pub mod fs;
 mod release;
 pub use self::release::*;
 
@@ -58,7 +59,7 @@ pub trait TrackInfo {
 
 
 pub trait Track: TrackInfo + Identity {
-    fn modified_at(&self) -> Option<time::Instant>;
+    fn modified_at(&self) -> Option<time::SystemTime>;
     /// Constructs the audiostream for this track at the earliest available sample. This method may
     /// be called multiple times during the track's lifetime.
     fn audio(&self) -> Result<dyn::Seek, Box<error::Error>>;
