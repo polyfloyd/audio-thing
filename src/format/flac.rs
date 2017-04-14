@@ -85,11 +85,11 @@ pub fn decode<R>(input: R) -> Result<(dyn::Audio, format::Metadata), Error>
         let sample_rate = FLAC__stream_decoder_get_sample_rate(decoder);
         let length = FLAC__stream_decoder_get_total_samples(decoder);
         cb_data.meta.as_mut().unwrap().sample_rate = sample_rate;
-        if length == 0 {
+        if length > 0 {
             cb_data.meta.as_mut().unwrap().num_samples = Some(length);
-            debug!("stream info: {} channels, {} bits, {} hz, length unknown", num_channels, sample_size, sample_rate);
-        } else {
             debug!("stream info: {} channels, {} bits, {} hz, {} samples", num_channels, sample_size, sample_rate, length);
+        } else {
+            debug!("stream info: {} channels, {} bits, {} hz, length unknown", num_channels, sample_size, sample_rate);
         }
         assert_ne!(0, cb_data.meta.as_mut().unwrap().sample_rate);
 
@@ -463,20 +463,23 @@ impl From<io::Error> for Error {
 #[cfg(test)]
 mod tests {
     use super::*;
-    const testfile: &'static str = "testdata/Various Artists - Dark Sine of the Moon/01 - The B-Trees - Lucy in the Cloud with Sine Waves.flac";
+
+    fn testfile() -> &'static path::Path {
+        path::Path::new("testdata/Various Artists - Dark Sine of the Moon/01 - The B-Trees - Lucy in the Cloud with Sine Waves.flac")
+    }
 
     #[test]
     fn read_file() {
-        let (audio, _) = decode(fs::File::open(path::Path::new(testfile)).unwrap()).unwrap();
+        let (audio, _) = decode(fs::File::open(testfile()).unwrap()).unwrap();
         assert!(audio.is_seek());
         assert_eq!(44100, audio.sample_rate());
     }
 
     #[test]
     fn metadata() {
-        let (_, meta) = decode(fs::File::open(path::Path::new(testfile)).unwrap()).unwrap();
+        let (_, meta) = decode(fs::File::open(path::Path::new(testfile())).unwrap()).unwrap();
         assert_eq!(44100, meta.sample_rate);
-        assert_ne!(Some(0), meta.num_samples);
+        assert_ne!(0, meta.num_samples.unwrap());
         assert!(meta.tags.values().any(|v| v == "Lucy in the Cloud with Sine Waves"));
         assert!(meta.tags.values().any(|v| v == "The B-Trees"));
         assert!(meta.tags.values().any(|v| v == "Dark Sine of the Moon"));
