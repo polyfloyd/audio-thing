@@ -12,6 +12,7 @@ extern crate rusqlite;
 extern crate sample;
 extern crate xdg;
 extern crate libflac_sys;
+extern crate liblame_sys;
 extern crate libpulse_sys;
 use std::*;
 use std::io::BufRead;
@@ -35,7 +36,6 @@ fn main() {
         .expect("$1 should be an audio file");
 
     let (dyn_input, _) = format::decode_file(&filename).unwrap();
-    assert!(dyn_input.is_seek());
     let mut pb = player::Playback::new(dyn_input, &player::output::pulse::Output{});
     pb.set_playstate(player::State::Playing);
 

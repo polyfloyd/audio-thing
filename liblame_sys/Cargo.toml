@@ -1,0 +1,10 @@
+[package]
+name = "liblame_sys"
+version = "3.99.0"
+authors = ["polyfloyd <floyd@polyfloyd.net>"]
+build = "build.rs"
+
+[dependencies]
+
+[build-dependencies]
+bindgen = "~0.20"

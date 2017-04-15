@@ -16,4 +16,5 @@ rusqlite = { version = "*", features = [ "functions" ] }
 sample = "*"
 xdg = "*"
 libflac_sys = { version = "^1.3.2", path = "libflac_sys" }
+liblame_sys = { version = "^3.99.0", path = "liblame_sys" }
 libpulse_sys = { version = "^10.0.0", path = "libpulse_sys" }

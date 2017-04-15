@@ -6,6 +6,7 @@ use id3;
 use ::audio::*;
 
 pub mod flac;
+pub mod mp3;
 pub mod wave;
 
 
@@ -20,6 +21,8 @@ pub fn decode_file(path: &path::Path) -> Result<(dyn::Audio, Metadata), Error> {
     let header = &buf[..nread];
     if header.starts_with(flac::MAGIC) {
         return Ok(flac::decode(file)?);
+    } else if mp3::magic().is_match(&header) {
+        return Ok(mp3::decode(file)?);
     } else if wave::magic().is_match(&header) {
         return Ok(wave::decode(file)?);
     }
@@ -69,6 +72,7 @@ pub enum Error {
     Unsupported,
     IO(io::Error),
     Flac(flac::Error),
+    Mp3(mp3::Error),
     Wave(wave::Error),
 }
 
@@ -83,6 +87,9 @@ impl fmt::Display for Error {
             },
             Error::Flac(ref err) => {
                 write!(f, "Flac: {}", err)
+            },
+            Error::Mp3(ref err) => {
+                write!(f, "MP3: {}", err)
             },
             Error::Wave(ref err) => {
                 write!(f, "Wave: {}", err)
@@ -99,6 +106,7 @@ impl error::Error for Error {
     fn cause(&self) -> Option<&error::Error> {
         match *self {
             Error::Flac(ref err) => Some(err),
+            Error::Mp3(ref err) => Some(err),
             Error::Wave(ref err) => Some(err),
             _ => None,
         }
@@ -114,6 +122,12 @@ impl From<io::Error> for Error {
 impl From<flac::Error> for Error {
     fn from(err: flac::Error) -> Error {
         Error::Flac(err)
+    }
+}
+
+impl From<mp3::Error> for Error {
+    fn from(err: mp3::Error) -> Error {
+        Error::Mp3(err)
     }
 }
 
