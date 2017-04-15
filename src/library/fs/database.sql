@@ -20,14 +20,14 @@ CREATE TABLE "track" (
 -- A track has zero or more artists.
 CREATE TABLE "track_artist" (
     "track_path" TEXT NOT NULL,
-    "artist_name" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
     "type" TEXT,
 
-    PRIMARY KEY ("track_path", "artist_name")
+    PRIMARY KEY ("track_path", "name")
         ON CONFLICT REPLACE,
     FOREIGN KEY ("track_path") REFERENCES "track"("path")
-        ON UPDATE CASCADE ON DELETE CASCADE),
-    CHECK ("type" IN ("album", "featuring", "remixer"))
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    CHECK ("type" IN ("album", "remixer"))
 );
 
 -- A track has zero or more genres.
@@ -38,5 +38,5 @@ CREATE TABLE "track_genre" (
     PRIMARY KEY ("track_path", "genre")
         ON CONFLICT REPLACE,
     FOREIGN KEY ("track_path") REFERENCES "track"("path")
-        ON UPDATE CASCADE ON DELETE CASCADE)
+        ON UPDATE CASCADE ON DELETE CASCADE
 );

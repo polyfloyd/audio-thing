@@ -35,12 +35,12 @@ impl Filesystem {
             .query_row(&[], |row| row.get::<_, u32>(0))?;
 
         debug!("filesystem db schema version: {}, current: {}", db_version, current_version);
-        let db = if cfg!(not(release)) || db_version != current_version {
+        let mut db = if cfg!(not(release)) || db_version != current_version {
             drop(db);
             debug!("(re)initializing filesystem db");
             fs::remove_file(&db_path)?;
             let db = sqlite::Connection::open(&db_path)?;
-            db.execute(include_str!("database.sql"), &[])?;
+            db.execute_batch(include_str!("database.sql"))?;
             // Eh, pragma statements don't seem to handle parameters very well. Let's use the
             // idiot way for now.
             db.execute(&format!("PRAGMA user_version = {}", current_version), &[])?;
@@ -49,7 +49,7 @@ impl Filesystem {
             debug!("filesystem db schema up to date");
             db
         };
-        init_db_functions(&db)?;
+        init_db_functions(&mut db)?;
 
         let fs = Filesystem {
             root: root,
@@ -64,11 +64,11 @@ impl Filesystem {
                     Some(arc) => arc,
                     None => return,
                 };
-                let db = arc.lock().unwrap();
-                if let Err(err) = track_add_recursive(&db, &root) {
+                let mut db = arc.lock().unwrap();
+                if let Err(err) = track_add_recursive(&mut db, &root) {
                     error!("error building index: {}", err);
                 }
-                if let Err(err) = track_clean_recursive(&db, path::Path::new("")) {
+                if let Err(err) = track_clean_recursive(&mut db, path::Path::new("")) {
                     error!("error cleaning index: {}", err);
                 }
             }
@@ -84,8 +84,8 @@ impl Filesystem {
                             Some(arc) => arc,
                             None => return,
                         };
-                        let db = arc.lock().unwrap();
-                        match $expr(&*db) {
+                        let mut db = arc.lock().unwrap();
+                        match $expr(&mut *db) {
                             Ok(_) => (),
                             Err(err) => {
                                 error!("{}", err);
@@ -95,50 +95,50 @@ impl Filesystem {
                 }
                 match event {
                     notify::DebouncedEvent::Create(path) => {
-                        with_db!(|db: &sqlite::Connection| {
+                        with_db!(|db: &mut sqlite::Connection| {
                             path.canonicalize()
                                 .map_err(|err| err.into())
                                 .and_then(|path| {
-                                    track_add_recursive(&db, &path)
+                                    track_add_recursive(db, &path)
                                 })
                         });
                     },
                     notify::DebouncedEvent::Write(path) => {
-                        with_db!(|db: &sqlite::Connection| {
+                        with_db!(|db: &mut sqlite::Connection| {
                             path.canonicalize()
                                 .map_err(|err| err.into())
                                 .and_then(|path| {
-                                    track_add_recursive(&db, &path)
+                                    track_add_recursive(db, &path)
                                 })
                         });
                     },
                     notify::DebouncedEvent::Chmod(path) => {
-                        with_db!(|db: &sqlite::Connection| {
+                        with_db!(|db: &mut sqlite::Connection| {
                             path.canonicalize()
                                 .map_err(|err| err.into())
                                 .and_then(|path| {
-                                    track_add_recursive(&db, &path)?;
-                                    track_clean_recursive(&db, &path)
+                                    track_add_recursive(db, &path)?;
+                                    track_clean_recursive(db, &path)
                                 })
                         });
                     },
                     notify::DebouncedEvent::Remove(path) => {
-                        with_db!(|db: &sqlite::Connection| {
+                        with_db!(|db: &mut sqlite::Connection| {
                             path.canonicalize()
                                 .map_err(|err| err.into())
                                 .and_then(|path| {
-                                    track_clean_recursive(&db, &path)
+                                    track_clean_recursive(db, &path)
                                 })
                         });
                     },
                     notify::DebouncedEvent::Rename(src, dest) => {
-                        with_db!(|db: &sqlite::Connection| {
+                        with_db!(|db: &mut sqlite::Connection| {
                             src.canonicalize()
                                 .map_err(|err| err.into())
-                                .and_then(|path| track_clean_recursive(&db, &path))?;
+                                .and_then(|path| track_clean_recursive(db, &path))?;
                             dest.canonicalize()
                                 .map_err(|err| err.into())
-                                .and_then(|path| track_add_recursive(&db, &path))
+                                .and_then(|path| track_add_recursive(db, &path))
                         });
                     },
                     notify::DebouncedEvent::NoticeWrite(_) => (),
@@ -156,7 +156,7 @@ impl Filesystem {
 
 
 /// Attempts to recursively add or update a file to the index.
-fn track_add_recursive(db: &sqlite::Connection, path: &path::Path) -> Result<(), Error> {
+fn track_add_recursive(db: &mut sqlite::Connection, path: &path::Path) -> Result<(), Error> {
     if fs::metadata(path)?.is_dir() {
         for entry in fs::read_dir(path)? {
             let entry = entry?;
@@ -188,14 +188,16 @@ fn track_add_recursive(db: &sqlite::Connection, path: &path::Path) -> Result<(),
     Ok(())
 }
 
-fn track_upsert<'a>(db: &sqlite::Connection, track: &MetadataTrack<'a>) -> Result<(), Error> {
-    db.execute(r#"
+fn track_upsert<'a>(db: &mut sqlite::Connection, track: &MetadataTrack<'a>) -> Result<(), Error> {
+    let tx = db.transaction()?;
+    let path = track.path.to_str()
+        .ok_or(Error::BadPath(track.path.to_path_buf()))?;
+    tx.execute(r#"
         INSERT INTO "track"
         ("path", "mod_time", "duration", "title", "rating", "release", "album_title", "album_disc", "album_track")
         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
     "#, &[
-        &track.path.to_str()
-            .ok_or(Error::BadPath(track.path.to_path_buf()))?,
+        &path,
         &(track.modified_at()
             .and_then(|mtime| {
                 mtime.duration_since(time::UNIX_EPOCH).ok()
@@ -210,7 +212,29 @@ fn track_upsert<'a>(db: &sqlite::Connection, track: &MetadataTrack<'a>) -> Resul
         &track.album_disc(),
         &track.album_track(),
     ])?;
+    tx.execute(r#"
+        DELETE FROM "track_artist"
+        WHERE "track_path" = ?1;
+    "#, &[ &path ])?;
 
+    let artists = track.artists().into_iter().map(|name| (name, None))
+        .chain(track.remixers().into_iter().map(|name| (name, Some("remixer"))))
+        .chain(track.album_artists().into_iter().map(|name| (name, Some("album"))));
+    for (name, typ) in artists {
+        tx.execute(r#"
+            INSERT INTO "track_artist"
+            ("track_path", "name", "type")
+            VALUES (?1, ?2, ?3)
+        "#, &[ &path, &name, &typ ])?;
+    }
+    for genre in track.genres() {
+        tx.execute(r#"
+            INSERT INTO "track_genre"
+            ("track_path", "genre")
+            VALUES (?1, ?2)
+        "#, &[ &path, &genre ])?;
+    }
+    tx.commit()?;
     Ok(())
 }
 
@@ -226,7 +250,7 @@ fn track_clean_recursive(db: &sqlite::Connection, path: &path::Path) -> Result<(
 }
 
 
-fn init_db_functions(db: &sqlite::Connection) -> Result<(), Error> {
+fn init_db_functions(db: &mut sqlite::Connection) -> Result<(), Error> {
     db.create_scalar_function("file_exists", 1, false, |ctx| {
         let path = ctx.get::<String>(0)?;
         fs::metadata(path)
@@ -323,13 +347,13 @@ mod tests {
     #[test]
     fn db_schema() {
         let db = sqlite::Connection::open_in_memory().unwrap();
-        db.execute(include_str!("database.sql"), &[]).unwrap();
+        db.execute_batch(include_str!("database.sql")).unwrap();
     }
 
     #[test]
     fn db_user_funcs() {
-        let db = sqlite::Connection::open_in_memory().unwrap();
-        init_db_functions(&db).unwrap();
+        let mut db = sqlite::Connection::open_in_memory().unwrap();
+        init_db_functions(&mut db).unwrap();
         let file = "testdata/Various Artists - Dark Sine of the Moon/01 - The B-Trees - Lucy in the Cloud with Sine Waves.flac";
         let exists = db.query_row("SELECT file_exists(?1)", &[&file], |row| row.get::<_, bool>(0)).unwrap();
         assert!(exists);
@@ -350,15 +374,15 @@ mod tests {
 
     #[test]
     fn clean_tracks() {
-        let db = sqlite::Connection::open_in_memory().unwrap();
+        let mut db = sqlite::Connection::open_in_memory().unwrap();
         db.execute(include_str!("database.sql"), &[]).unwrap();
-        init_db_functions(&db).unwrap();
+        init_db_functions(&mut db).unwrap();
 
         db.execute(r#"
             INSERT INTO "track"
             ("path", "mod_time", "duration", "title")
             VALUES ('/home/user/non_existing.file', 1337, 42, 'Dummy')
-        "#, &[ ]).unwrap();
+        "#, &[]).unwrap();
         assert_eq!(1, db.query_row("SELECT COUNT(*) FROM \"track\"", &[], |row| row.get(0)).unwrap());
 
         track_clean_recursive(&db, path::Path::new("/home/user/")).unwrap();
