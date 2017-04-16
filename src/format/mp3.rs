@@ -48,11 +48,11 @@ pub fn decode<R>(mut input: R) -> Result<(dyn::Audio, format::Metadata), Error>
         let mut buf_left = [0; MAX_FRAME_SIZE];
         let mut buf_right = [0; MAX_FRAME_SIZE];
 
-        let mut decode_count = 0;
-        while decode_count == 0 {
+        let mut rs = 0;
+        while rs == 0 {
             let mut read_buf = [0; 8192];
             let num_read = input.read(&mut read_buf)?;
-            decode_count = hip_decode1_headersB(
+            rs = hip_decode1_headersB(
                 hip,
                 read_buf.as_mut_ptr(),
                 num_read,
@@ -63,10 +63,11 @@ pub fn decode<R>(mut input: R) -> Result<(dyn::Audio, format::Metadata), Error>
                 &mut enc_padding,
             );
         }
-        if decode_count == -1 {
+        if rs == -1 {
             hip_decode_exit(hip);
-            return Err(Error::Generic);
+            return Err(Error::Lame(rs));
         }
+        let decode_count = rs;
         assert_eq!(1, mp3_data.header_parsed);
         assert_eq!(MAX_FRAME_SIZE, mp3_data.framesize as usize);
 
@@ -139,20 +140,20 @@ impl<F, R> iter::Iterator for Decoder<F, R>
                 },
             };
             unsafe {
-                let decode_count = hip_decode1(
+                let rs = hip_decode1(
                     self.hip,
                     read_buf.as_mut_ptr(),
                     num_read,
                     self.buffers[0].as_mut_ptr(),
                     self.buffers[1].as_mut_ptr(),
                 );
-                match decode_count {
-                    -1 => {
-                        error!("Error decoding next frame");
-                        return None;
-                    }
+                match rs {
                     0 => (),
-                    _ => {
+                    code if code < 0 => {
+                        error!("Error decoding next frame: {}", Error::Lame(code));
+                        return None;
+                    },
+                    decode_count => {
                         self.next_sample = 0;
                         self.samples_available = decode_count as usize;
                     },
@@ -216,8 +217,8 @@ impl fmt::Display for VaFormatter {
 pub enum Error {
     IO(io::Error),
     ID3(id3::Error),
+    Lame(i32),
     ConstructionFailed,
-    Generic,
 }
 
 impl fmt::Display for Error {
@@ -229,11 +230,23 @@ impl fmt::Display for Error {
             Error::ID3(ref err) => {
                 write!(f, "ID3: {}", err)
             },
+            Error::Lame(code) => {
+                let msg = match code {
+                    0 => "okay",
+                    -1 => "generic error",
+                    -10 => "no memory",
+                    -11 => "bad bitrate",
+                    -12 => "bad sample frequency",
+                    -13 => "internal error",
+                    -80 => "read error",
+                    -81 => "write error",
+                    -82 => "file too large",
+                    _ => "unknown",
+                };
+                write!(f, "Lame error: {}", msg)
+            },
             Error::ConstructionFailed => {
                 write!(f, "Failed to construct decoder")
-            },
-            Error::Generic => {
-                write!(f, "Generic error")
             },
         }
     }
