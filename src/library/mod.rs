@@ -1,4 +1,5 @@
 use std::*;
+use std::borrow::Cow;
 use ::audio::*;
 
 pub mod fs;
@@ -8,7 +9,7 @@ pub use self::release::*;
 
 pub trait Library {
     /// Returns the unique name of this library. May not contain whitespace.
-    fn name(&self) -> String;
+    fn name(&self) -> Cow<str>;
 
     // TODO: search
     fn tracks(&self) -> Result<Box<iter::Iterator<Item=Box<Track>>>, Box<error::Error>>;
@@ -21,7 +22,7 @@ pub enum Audio {
 }
 
 impl Identity for Audio {
-    fn id(&self) -> (String, String) {
+    fn id(&self) -> (Cow<str>, Cow<str>) {
         match *self {
             Audio::Track(ref track) => track.id(),
             Audio::Stream(ref stream) => stream.id(),
@@ -33,7 +34,7 @@ impl Identity for Audio {
 pub trait Identity {
     /// Returns the library name, equal to `Library::name()` and a string that uniquely identifies
     /// an item in its library.
-    fn id(&self) -> (String, String);
+    fn id(&self) -> (Cow<str>, Cow<str>);
 }
 
 

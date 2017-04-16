@@ -1,4 +1,5 @@
 use std::*;
+use std::borrow::Cow;
 use regex::Regex;
 use ::audio::*;
 use ::format;
@@ -11,7 +12,7 @@ pub struct MetadataTrack<'a> {
 }
 
 impl<'a> library::Identity for MetadataTrack<'a> {
-    fn id(&self) -> (String, String) {
+    fn id(&self) -> (Cow<str>, Cow<str>) {
         ("fs".into(), self.path.to_string_lossy().into())
     }
 }
