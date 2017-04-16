@@ -20,10 +20,6 @@ pub struct Filesystem {
 
 impl Filesystem {
     pub fn new(root: &path::Path) -> Result<Filesystem, Error> {
-        let root = root.canonicalize()?;
-        assert!(root.is_absolute());
-        debug!("Initializing filesystem with root: {}", root.to_string_lossy());
-
         // TODO: Instance
         let db_path = xdg::BaseDirectories::with_prefix(env!("CARGO_PKG_NAME"))?
             .place_cache_file("filesystem_TODO.db")?;
@@ -51,7 +47,13 @@ impl Filesystem {
             db
         };
         init_db_functions(&mut db)?;
+        Filesystem::with_db(db, root)
+    }
 
+    fn with_db(db: sqlite::Connection, root: &path::Path) -> Result<Filesystem, Error> {
+        let root = root.canonicalize()?;
+        assert!(root.is_absolute());
+        debug!("Initializing filesystem with root: {}", root.to_string_lossy());
         let fs = Filesystem {
             root: root,
             db: sync::Arc::new(sync::Mutex::new(db)),
@@ -348,6 +350,15 @@ impl From<xdg::BaseDirectoriesError> for Error {
 mod tests {
     use super::*;
 
+    const ALBUM: &'static str = "testdata/Various Artists - Dark Sine of the Moon";
+
+    fn db() -> sqlite::Connection {
+        let mut db = sqlite::Connection::open_in_memory().unwrap();
+        init_db_functions(&mut db).unwrap();
+        db.execute_batch(include_str!("database.sql")).unwrap();
+        db
+    }
+
     #[test]
     fn db_schema() {
         let db = sqlite::Connection::open_in_memory().unwrap();
@@ -369,7 +380,16 @@ mod tests {
 
     #[test]
     fn read_tracks() {
-        let fs = Filesystem::new(path::Path::new("testdata/Various Artists - Dark Sine of the Moon")).unwrap();
+        let fs = Filesystem::with_db(db(), path::Path::new(ALBUM)).unwrap();
+        thread::sleep(time::Duration::from_secs(1)); // Await initial scan.
+        let db = fs.db.lock().unwrap();
+        let num_tracks = db.query_row("SELECT COUNT(*) FROM \"track\"", &[], |row| row.get(0)).unwrap();
+        assert_eq!(3, num_tracks);
+    }
+
+    #[test]
+    fn search() {
+        let fs = Filesystem::with_db(db(), path::Path::new(ALBUM)).unwrap();
         thread::sleep(time::Duration::from_secs(1)); // Await initial scan.
         let db = fs.db.lock().unwrap();
         let num_tracks = db.query_row("SELECT COUNT(*) FROM \"track\"", &[], |row| row.get(0)).unwrap();
@@ -378,10 +398,7 @@ mod tests {
 
     #[test]
     fn clean_tracks() {
-        let mut db = sqlite::Connection::open_in_memory().unwrap();
-        db.execute(include_str!("database.sql"), &[]).unwrap();
-        init_db_functions(&mut db).unwrap();
-
+        let db = db();
         db.execute(r#"
             INSERT INTO "track"
             ("path", "mod_time", "duration", "title")
