@@ -189,6 +189,13 @@ pub enum Audio {
 }
 
 impl Audio {
+    pub fn into_seek(self) -> Option<Seek> {
+        match self {
+            Audio::Source(_) => None,
+            Audio::Seek(seek) => Some(seek),
+        }
+    }
+
     pub fn is_seek(&self) -> bool {
         match *self {
             Audio::Source(_) => false,

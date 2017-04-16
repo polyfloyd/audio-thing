@@ -5,7 +5,7 @@ use notify::{self, Watcher};
 use rusqlite as sqlite;
 use xdg;
 use ::format;
-use ::library::{Track, TrackInfo};
+use ::library::{self, Track, TrackInfo};
 
 mod track;
 use self::track::*;
@@ -157,6 +157,62 @@ impl Filesystem {
     }
 }
 
+impl library::Library for Filesystem {
+    fn name(&self) -> Cow<str> {
+        Cow::Borrowed("fs")
+    }
+
+    fn tracks(&self) -> Result<Box<iter::Iterator<Item=Box<library::Track>>>, Box<error::Error>> {
+        let db = self.db.lock().unwrap();
+        let mut stmt_tracks = db.prepare(r#"
+           SELECT * FROM "track"
+        "#)?;
+        let mut stmt_artists = db.prepare(r#"
+           SELECT "name", "type" FROM "track_artist"
+           WHERE "artist_path" = ?1
+        "#)?;
+        let mut stmt_genres = db.prepare(r#"
+           SELECT "genre" FROM "track_genre"
+           WHERE "artist_path" = ?1
+        "#)?;
+        let tracks: Result<Vec<_>, Box<error::Error>> = stmt_tracks
+            .query_and_then(&[], |row| {
+                let mut track = RawTrack {
+                    path: row.get("path"),
+                    modified_at: time::UNIX_EPOCH
+                        + time::Duration::from_secs(row.get::<_, i64>("modified_at") as _),
+                    duration: time::Duration::from_secs(row.get::<_, i64>("duration") as _),
+                    title: row.get("title"),
+                    artists: vec![],
+                    remixers: vec![],
+                    genres: vec![],
+                    album_title: row.get("album_title"),
+                    album_artists: vec![],
+                    album_disc: row.get("album_disc"),
+                    album_track: row.get("album_track"),
+                    rating: row.get("rating"),
+                    release: row.get("release"),
+                };
+                let artists = stmt_artists.query_map(&[&track.path], |row| (row.get("name"), row.get("type")))?;
+                for artist in artists {
+                    let (name, typ): (_, Option<String>) = artist?;
+                    match typ.as_ref().map(|s| s.as_str()) {
+                        None => track.artists.push(name),
+                        Some("album") => track.album_artists.push(name),
+                        Some("remixer") => track.remixers.push(name),
+                        _ => unreachable!(),
+                    };
+                }
+                for genre in stmt_genres.query_map(&[&track.path], |row| row.get("genre"))? {
+                    track.genres.push(genre?);
+                }
+                Ok(track)
+            })?
+            .collect(); // TODO: Stream results instead of collecting.
+        Ok(Box::from(tracks?.into_iter().map(|t| Box::<library::Track>::from(Box::from(t)))))
+    }
+}
+
 
 /// Attempts to recursively add or update a file to the index.
 fn track_add_recursive(db: &mut sqlite::Connection, path: &path::Path) -> Result<(), Error> {
@@ -197,7 +253,7 @@ fn track_upsert<'a>(db: &mut sqlite::Connection, track: &MetadataTrack<'a>) -> R
         .ok_or(Error::BadPath(track.path.to_path_buf()))?;
     tx.execute(r#"
         INSERT INTO "track"
-        ("path", "mod_time", "duration", "title", "rating", "release", "album_title", "album_disc", "album_track")
+        ("path", "modified_at", "duration", "title", "rating", "release", "album_title", "album_disc", "album_track")
         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
     "#, &[
         &path,
@@ -279,6 +335,7 @@ pub enum Error {
     Sqlite(sqlite::Error),
     Xdg(xdg::BaseDirectoriesError),
     BadPath(path::PathBuf),
+    NonSeek,
     Unspecified,
 }
 
@@ -299,6 +356,9 @@ impl fmt::Display for Error {
             },
             Error::BadPath(ref path) => {
                 write!(f, "The path {} could not be converted to a string", path.to_string_lossy())
+            },
+            Error::NonSeek => {
+                write!(f, "Attempted to open a track that does not support seeking")
             },
             Error::Unspecified => {
                 write!(f, "Unspecified")
@@ -349,6 +409,7 @@ impl From<xdg::BaseDirectoriesError> for Error {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use library::Library;
 
     const ALBUM: &'static str = "testdata/Various Artists - Dark Sine of the Moon";
 
@@ -388,7 +449,7 @@ mod tests {
     }
 
     #[test]
-    fn search() {
+    fn build_index() {
         let fs = Filesystem::with_db(db(), path::Path::new(ALBUM)).unwrap();
         thread::sleep(time::Duration::from_secs(1)); // Await initial scan.
         let db = fs.db.lock().unwrap();
@@ -401,12 +462,19 @@ mod tests {
         let db = db();
         db.execute(r#"
             INSERT INTO "track"
-            ("path", "mod_time", "duration", "title")
+            ("path", "modified_at", "duration", "title")
             VALUES ('/home/user/non_existing.file', 1337, 42, 'Dummy')
         "#, &[]).unwrap();
         assert_eq!(1, db.query_row("SELECT COUNT(*) FROM \"track\"", &[], |row| row.get(0)).unwrap());
 
         track_clean_recursive(&db, path::Path::new("/home/user/")).unwrap();
         assert_eq!(0, db.query_row("SELECT COUNT(*) FROM \"track\"", &[], |row| row.get(0)).unwrap());
+    }
+
+    #[test]
+    fn query_tracks() {
+        let fs = Filesystem::with_db(db(), path::Path::new(ALBUM)).unwrap();
+        thread::sleep(time::Duration::from_secs(1)); // Await initial scan.
+        assert_eq!(3, fs.tracks().unwrap().count());
     }
 }

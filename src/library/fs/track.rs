@@ -4,6 +4,90 @@ use regex::Regex;
 use ::audio::*;
 use ::format;
 use ::library;
+use super::Error;
+
+
+pub struct RawTrack {
+    pub path: String,
+    pub modified_at: time::SystemTime,
+    pub duration: time::Duration,
+
+    pub title: String,
+    pub artists: Vec<String>,
+    pub remixers: Vec<String>,
+    pub genres: Vec<String>,
+    pub album_title: Option<String>,
+    pub album_artists: Vec<String>,
+    pub album_disc: Option<i32>,
+    pub album_track: Option<i32>,
+    pub rating: Option<u8>,
+    pub release: Option<library::Release>,
+}
+
+impl library::Identity for RawTrack {
+    fn id(&self) -> (Cow<str>, Cow<str>) {
+        (Cow::Borrowed("fs"), Cow::Borrowed(&self.path))
+    }
+}
+
+impl library::TrackInfo for RawTrack {
+    fn title(&self) -> Cow<str> {
+        Cow::Borrowed(&self.title)
+    }
+
+    fn artists(&self) -> Cow<[String]> {
+        Cow::Borrowed(&self.artists)
+    }
+
+    fn remixers(&self) -> Cow<[String]> {
+        Cow::Borrowed(&self.remixers)
+    }
+
+    fn genres(&self) -> Cow<[String]> {
+        Cow::Borrowed(&self.genres)
+    }
+
+    fn album_title(&self) -> Option<Cow<str>> {
+        self.album_title.as_ref()
+            .map(|s| Cow::Borrowed(s.as_str()))
+    }
+
+    fn album_artists(&self) -> Cow<[String]> {
+        Cow::Borrowed(&self.album_artists)
+    }
+
+    fn album_disc(&self) -> Option<i32> {
+        self.album_disc
+    }
+
+    fn album_track(&self) -> Option<i32> {
+        self.album_track
+    }
+
+    fn rating(&self) -> Option<u8> {
+        self.rating
+    }
+
+    fn release(&self) -> Option<library::Release> {
+        self.release.clone()
+    }
+}
+
+impl library::Track for RawTrack {
+    fn modified_at(&self) -> Option<time::SystemTime> {
+        Some(self.modified_at)
+    }
+
+    fn audio(&self) -> Result<dyn::Seek, Box<error::Error>> {
+        let (decoder, _) = format::decode_file(path::Path::new(&self.path))?;
+        decoder.into_seek()
+            .ok_or(Box::from(Error::NonSeek))
+    }
+
+    fn duration(&self) -> time::Duration {
+        self.duration
+    }
+}
 
 
 pub struct MetadataTrack<'a> {

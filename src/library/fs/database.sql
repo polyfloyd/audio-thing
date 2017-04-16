@@ -1,6 +1,6 @@
 CREATE TABLE "track" (
     "path" TEXT,
-    "mod_time" INTEGER NOT NULL,
+    "modified_at" INTEGER NOT NULL,
 
     "duration" INTEGER NOT NULL,
     "title" TEXT NOT NULL,
