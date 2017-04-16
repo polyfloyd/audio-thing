@@ -18,7 +18,7 @@ impl<'a> library::Identity for MetadataTrack<'a> {
 }
 
 impl<'a> library::TrackInfo for MetadataTrack<'a> {
-    fn title(&self) -> String {
+    fn title(&self) -> Cow<str> {
         lazy_static! {
             static ref FROM_STEM: Regex = Regex::new(r"^(?:.* - .*)* - (.+)$").unwrap();
         }
@@ -33,9 +33,10 @@ impl<'a> library::TrackInfo for MetadataTrack<'a> {
                     .map(|m| m.as_str().into())
                     .unwrap_or_else(|| stem.into())
             })
+            .into()
     }
 
-    fn artists(&self) -> Vec<String> {
+    fn artists(&self) -> Cow<[String]> {
         lazy_static! {
             static ref FROM_STEM: Regex = Regex::new(r"^(?:.* - )(.+) - (:?.+)$").unwrap();
         }
@@ -50,13 +51,14 @@ impl<'a> library::TrackInfo for MetadataTrack<'a> {
                     .map(|m| vec![m.as_str().into()])
                     .unwrap_or(vec![])
             })
+            .into()
     }
 
-    fn remixers(&self) -> Vec<String> {
-        vec![]
+    fn remixers(&self) -> Cow<[String]> {
+        Cow::Borrowed(&[])
     }
 
-    fn genres(&self) -> Vec<String> {
+    fn genres(&self) -> Cow<[String]> {
         self.meta.tags.get("genre")
             .map(|g| {
                 g.split(',')
@@ -64,17 +66,19 @@ impl<'a> library::TrackInfo for MetadataTrack<'a> {
                     .collect()
             })
             .unwrap_or(vec![])
+            .into()
     }
 
-    fn album_title(&self) -> Option<String> {
+    fn album_title(&self) -> Option<Cow<str>> {
         self.meta.tags.get("album")
-            .map(|t| t.clone())
+            .map(|t| Cow::Owned(t.clone()))
     }
 
-    fn album_artists(&self) -> Vec<String> {
+    fn album_artists(&self) -> Cow<[String]> {
         self.meta.tags.get("albumartist")
             .map(|a| vec![a.clone()])
             .unwrap_or(vec![])
+            .into()
     }
 
     fn album_disc(&self) -> Option<i32> {
@@ -155,8 +159,8 @@ mod tests {
             },
         };
         assert_eq!("Sandstorm", track.title());
-        assert_eq!(vec!["Darude"], track.artists());
-        assert_eq!(vec!["Trance"], track.genres());
+        assert_eq!(vec!["Darude"], track.artists().into_owned());
+        assert_eq!(vec!["Trance"], track.genres().into_owned());
     }
 
     #[test]
@@ -170,7 +174,7 @@ mod tests {
             },
         };
         assert_eq!("Sandstorm", track.title());
-        assert_eq!(vec!["Darude"], track.artists());
+        assert_eq!(vec!["Darude"], track.artists().into_owned());
         assert_eq!(Some(1), track.album_track());
     }
 }

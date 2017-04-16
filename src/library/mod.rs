@@ -39,16 +39,16 @@ pub trait Identity {
 
 
 pub trait TrackInfo {
-    fn title(&self) -> String;
-    fn artists(&self) -> Vec<String>;
+    fn title(&self) -> Cow<str>;
+    fn artists(&self) -> Cow<[String]>;
     /// Zero or more names of artists that have produced this track as a remix or rework of the
     /// original.
-    fn remixers(&self) -> Vec<String>;
-    fn genres(&self) -> Vec<String>;
+    fn remixers(&self) -> Cow<[String]>;
+    fn genres(&self) -> Cow<[String]>;
     /// The title of the album if known. It is assumed that any track having the same album artists
     /// and title belongs to the same album.
-    fn album_title(&self) -> Option<String>;
-    fn album_artists(&self) -> Vec<String>;
+    fn album_title(&self) -> Option<Cow<str>>;
+    fn album_artists(&self) -> Cow<[String]>;
     /// The disc number starting at 1 if known.
     fn album_disc(&self) -> Option<i32>;
     /// The position of this track in the album starting at 1 if known.
@@ -70,7 +70,7 @@ pub trait Track: TrackInfo + Identity {
 
 
 pub trait Stream: Identity {
-    fn title(&self) -> String;
+    fn title(&self) -> Cow<str>;
     /// Opens the stream for listening. If information about the tracks being played is available,
     /// it can be read from the returned iterator along with the time the track started playing.
     fn open(&self) -> Result<(dyn::Source, Box<iter::Iterator<Item=(Box<TrackInfo>, time::Instant)>>), Box<error::Error>>;

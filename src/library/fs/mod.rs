@@ -1,4 +1,5 @@
 use std::*;
+use std::borrow::Cow;
 use std::sync::mpsc;
 use notify::{self, Watcher};
 use rusqlite as sqlite;
@@ -205,10 +206,10 @@ fn track_upsert<'a>(db: &mut sqlite::Connection, track: &MetadataTrack<'a>) -> R
             .map(|dur| dur.as_secs() as i64)
             .ok_or(Error::Unspecified))?,
         &(track.duration().as_secs() as i64),
-        &track.title(),
+        &track.title().to_string(),
         &track.rating(),
         &track.release(),
-        &track.album_title(),
+        &track.album_title().map(|s| s.to_string()),
         &track.album_disc(),
         &track.album_track(),
     ])?;
@@ -217,22 +218,25 @@ fn track_upsert<'a>(db: &mut sqlite::Connection, track: &MetadataTrack<'a>) -> R
         WHERE "track_path" = ?1;
     "#, &[ &path ])?;
 
-    let artists = track.artists().into_iter().map(|name| (name, None))
-        .chain(track.remixers().into_iter().map(|name| (name, Some("remixer"))))
-        .chain(track.album_artists().into_iter().map(|name| (name, Some("album"))));
+    let ar = track.artists();
+    let rx = track.remixers();
+    let aa = track.album_artists();
+    let artists = ar.iter().map(|name| (name, None))
+        .chain(rx.iter().map(|name| (name, Some("remixer"))))
+        .chain(aa.iter().map(|name| (name, Some("album"))));
     for (name, typ) in artists {
         tx.execute(r#"
             INSERT INTO "track_artist"
             ("track_path", "name", "type")
             VALUES (?1, ?2, ?3)
-        "#, &[ &path, &name, &typ ])?;
+        "#, &[ &path, name, &typ ])?;
     }
-    for genre in track.genres() {
+    for genre in track.genres().iter() {
         tx.execute(r#"
             INSERT INTO "track_genre"
             ("track_path", "genre")
             VALUES (?1, ?2)
-        "#, &[ &path, &genre ])?;
+        "#, &[ &path, genre ])?;
     }
     tx.commit()?;
     Ok(())
