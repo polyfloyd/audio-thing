@@ -10,7 +10,7 @@ use ::format;
 
 pub fn magic() -> &'static bytes::Regex {
     lazy_static! {
-        static ref MAGIC: bytes::Regex = bytes::Regex::new(r"(?s-u)RIF(F|X)....WAVE").unwrap();
+        static ref MAGIC: bytes::Regex = bytes::Regex::new(r"(?s-u)^RIF(F|X)....WAVE").unwrap();
     }
     &MAGIC
 }
