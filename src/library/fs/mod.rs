@@ -264,10 +264,13 @@ fn track_upsert<'a>(db: &mut sqlite::Connection, track: &MetadataTrack<'a>) -> R
             .map(|dur| dur.as_secs() as i64)
             .ok_or(Error::Unspecified))?,
         &(track.duration().as_secs() as i64),
-        &track.title().to_string(),
+        &track.title()
+            .as_ref(),
         &track.rating(),
         &track.release(),
-        &track.album_title().map(|s| s.to_string()),
+        &track.album_title()
+            .as_ref()
+            .map(|s| s.as_ref()),
         &track.album_disc(),
         &track.album_track(),
     ])?;
