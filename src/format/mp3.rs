@@ -21,7 +21,6 @@ pub fn magic() -> &'static bytes::Regex {
 
 pub fn decode<R>(mut input: R) -> Result<(dyn::Audio, format::Metadata), Error>
     where R: io::Read + io::Seek + 'static {
-
     let id3_tag = {
         let mut buf = [0; 3];
         input.read_exact(&mut buf)?;
@@ -88,6 +87,7 @@ pub fn decode<R>(mut input: R) -> Result<(dyn::Audio, format::Metadata), Error>
             ($dyn:path) => {
                 $dyn(Box::from(Decoder {
                     input: input,
+                    input_buf: [0; 8192],
                     hip: hip,
                     sample_rate: sample_rate,
                     buffers: [buf_left, buf_right],
@@ -110,6 +110,7 @@ struct Decoder<F, R>
     where F: sample::Frame<Sample=i16>,
           R: io::Read + io::Seek + 'static {
     input: R,
+    input_buf: [u8; 8192],
     hip: hip_t,
     sample_rate: u32,
 
@@ -129,26 +130,27 @@ impl<F, R> iter::Iterator for Decoder<F, R>
           R: io::Read + io::Seek + 'static {
     type Item = F;
     fn next(&mut self) -> Option<Self::Item> {
+        let mut num_read = 0;
         while self.next_sample >= self.samples_available {
-            let mut read_buf = [0; 8192];
-            let num_read = match self.input.read(&mut read_buf) {
-                Ok(nr) if nr == 0 => return None,
-                Ok(nr) => nr,
-                Err(err) => {
-                    error!("{}", err);
-                    return None;
-                },
-            };
             unsafe {
                 let rs = hip_decode1(
                     self.hip,
-                    read_buf.as_mut_ptr(),
+                    self.input_buf.as_mut_ptr(),
                     num_read,
                     self.buffers[0].as_mut_ptr(),
                     self.buffers[1].as_mut_ptr(),
                 );
                 match rs {
-                    0 => (),
+                    0 => {
+                        num_read = match self.input.read(&mut self.input_buf) {
+                            Ok(nr) if nr == 0 => return None,
+                            Ok(nr) => nr,
+                            Err(err) => {
+                                error!("{}", err);
+                                return None;
+                            },
+                        };
+                    },
                     code if code < 0 => {
                         error!("Error decoding next frame: {}", Error::Lame(code));
                         return None;
