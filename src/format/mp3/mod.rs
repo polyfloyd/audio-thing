@@ -7,8 +7,13 @@ use sample;
 use ::audio::*;
 use ::format;
 
+mod index;
+use self::index::FrameIndex;
 
+
+/// This is the absolute maximum number of samples that can be contained in a single frame.
 const MAX_FRAME_SIZE: usize = 1152;
+const MAX_FRAME_BYTES: usize = 1348;
 
 
 pub fn magic() -> &'static bytes::Regex {
@@ -32,6 +37,9 @@ pub fn decode<R>(mut input: R) -> Result<(dyn::Audio, format::Metadata), Error>
         }
     };
 
+    let frame_index = FrameIndex::new(&mut input)?;
+    input.seek(io::SeekFrom::Start(frame_index.frames[0].offset))?;
+
     unsafe {
         let hip: hip_t = hip_decode_init();
         if hip.is_null() {
@@ -49,7 +57,7 @@ pub fn decode<R>(mut input: R) -> Result<(dyn::Audio, format::Metadata), Error>
 
         let mut rs = 0;
         while rs == 0 {
-            let mut read_buf = [0; 8192];
+            let mut read_buf = [0; MAX_FRAME_BYTES];
             let num_read = input.read(&mut read_buf)?;
             rs = hip_decode1_headersB(
                 hip,
@@ -72,25 +80,27 @@ pub fn decode<R>(mut input: R) -> Result<(dyn::Audio, format::Metadata), Error>
 
         let sample_rate = mp3_data.samplerate as u32;
         let num_channels = mp3_data.stereo as u32;
-        let num_samples = match mp3_data.nsamp {
-            0 => None,
-            n => Some(n),
-        };
+        let num_samples = frame_index.frames.last()
+            .map(|frame| frame.sample_offset + frame.num_samples as u64)
+            .ok_or(Error::Unsupported)?;
+
         let meta = format::Metadata {
             sample_rate: sample_rate,
-            num_samples: num_samples,
+            num_samples: Some(num_samples),
             tags: id3_tag.map(|tag| format::tags_from_id3(tag))
                 .unwrap_or_else(HashMap::new),
         };
-
         macro_rules! dyn_type {
             ($dyn:path) => {
                 $dyn(Box::from(Decoder {
                     input: input,
-                    input_buf: [0; 8192],
+                    input_buf: [0; MAX_FRAME_BYTES],
                     hip: hip,
+                    index: frame_index,
                     sample_rate: sample_rate,
+                    num_samples: num_samples,
                     buffers: [buf_left, buf_right],
+                    next_frame: 0,
                     next_sample: 0,
                     samples_available: decode_count as usize,
                     _f: marker::PhantomData,
@@ -98,8 +108,8 @@ pub fn decode<R>(mut input: R) -> Result<(dyn::Audio, format::Metadata), Error>
             }
         }
         Ok((match num_channels {
-            1 => dyn_type!(dyn::Source::MonoI16),
-            2 => dyn_type!(dyn::Source::StereoI16),
+            1 => dyn_type!(dyn::Seek::MonoI16),
+            2 => dyn_type!(dyn::Seek::StereoI16),
             _ => unreachable!(), // LAME's interface does not allow this.
         }, meta))
     }
@@ -110,11 +120,14 @@ struct Decoder<F, R>
     where F: sample::Frame<Sample=i16>,
           R: io::Read + io::Seek + 'static {
     input: R,
-    input_buf: [u8; 8192],
+    input_buf: [u8; MAX_FRAME_BYTES],
     hip: hip_t,
+    index: FrameIndex,
     sample_rate: u32,
+    num_samples: u64,
 
     buffers: [[i16; MAX_FRAME_SIZE]; 2],
+    next_frame: usize,
     next_sample: usize,
     samples_available: usize,
 
@@ -142,7 +155,15 @@ impl<F, R> iter::Iterator for Decoder<F, R>
                 );
                 match rs {
                     0 => {
-                        num_read = match self.input.read(&mut self.input_buf) {
+                        if self.next_frame >= self.index.frames.len() {
+                            return None;
+                        }
+                        let frame = &self.index.frames[self.next_frame];
+                        if let Err(err) = self.input.seek(io::SeekFrom::Start(frame.offset)) {
+                            error!("{}", err);
+                            return None;
+                        }
+                        num_read = match self.input.read(&mut self.input_buf[..frame.length as usize]) {
                             Ok(nr) if nr == 0 => return None,
                             Ok(nr) => nr,
                             Err(err) => {
@@ -156,6 +177,7 @@ impl<F, R> iter::Iterator for Decoder<F, R>
                         return None;
                     },
                     decode_count => {
+                        self.next_frame += 1;
                         self.next_sample = 0;
                         self.samples_available = decode_count as usize;
                     },
@@ -176,6 +198,41 @@ impl<F, R> Source for Decoder<F, R>
         self.sample_rate
     }
 }
+
+impl<F, R> Seekable for Decoder<F, R>
+    where F: sample::Frame<Sample=i16>,
+          R: io::Read + io::Seek + 'static {
+    fn seek(&mut self, pos: io::SeekFrom) -> Result<u64, SeekError> {
+        let abs_pos = match pos {
+            io::SeekFrom::Start(i) => i,
+            io::SeekFrom::End(i) => (self.length() + i as u64),
+            io::SeekFrom::Current(i) => (self.current_position() + i as u64),
+        };
+        let i = self.index.frame_for_sample(abs_pos)
+            .ok_or(SeekError::OutofRange { pos: abs_pos as i64, size: self.length() })?;
+        self.next_frame = i;
+        self.next_sample = abs_pos as usize - self.index.frames[i].sample_offset as usize;
+        self.samples_available = 0;
+        assert!(self.next_frame < self.index.frames.len());
+        assert!(self.next_sample < MAX_FRAME_SIZE);
+        Ok(abs_pos)
+    }
+
+    fn length(&self) -> u64 {
+        self.num_samples
+    }
+
+    fn current_position(&self) -> u64 {
+        if self.next_frame == 0 {
+            return 0;
+        }
+        self.index.frames[self.next_frame - 1].sample_offset + self.next_sample as u64
+    }
+}
+
+impl<F, R> Seek for Decoder<F, R>
+    where F: sample::Frame<Sample=i16>,
+          R: io::Read + io::Seek + 'static { }
 
 impl<F, R> Drop for Decoder<F, R>
     where F: sample::Frame<Sample=i16>,
@@ -219,8 +276,10 @@ impl fmt::Display for VaFormatter {
 pub enum Error {
     IO(io::Error),
     ID3(id3::Error),
+    Index(index::Error),
     Lame(i32),
     ConstructionFailed,
+    Unsupported,
 }
 
 impl fmt::Display for Error {
@@ -231,6 +290,9 @@ impl fmt::Display for Error {
             },
             Error::ID3(ref err) => {
                 write!(f, "ID3: {}", err)
+            },
+            Error::Index(ref err) => {
+                write!(f, "Index: {}", err)
             },
             Error::Lame(code) => {
                 let msg = match code {
@@ -250,19 +312,23 @@ impl fmt::Display for Error {
             Error::ConstructionFailed => {
                 write!(f, "Failed to construct decoder")
             },
+            Error::Unsupported => {
+                write!(f, "Unsupported")
+            },
         }
     }
 }
 
 impl error::Error for Error {
     fn description(&self) -> &str {
-        "LAME error"
+        "MP3 error"
     }
 
     fn cause(&self) -> Option<&error::Error> {
         match *self {
             Error::IO(ref err) => Some(err),
             Error::ID3(ref err) => Some(err),
+            Error::Index(ref err) => Some(err),
             _ => None,
         }
     }
@@ -277,5 +343,11 @@ impl From<io::Error> for Error {
 impl From<id3::Error> for Error {
     fn from(err: id3::Error) -> Error {
         Error::ID3(err)
+    }
+}
+
+impl From<index::Error> for Error {
+    fn from(err: index::Error) -> Error {
+        Error::Index(err)
     }
 }
