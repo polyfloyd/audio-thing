@@ -156,33 +156,6 @@ impl From<Seek> for Source {
 }
 
 
-pub enum Sink {
-    MonoI8(   Box<super::Sink<[i8;  1]>>),
-    MonoU8(   Box<super::Sink<[u8;  1]>>),
-    MonoI16(  Box<super::Sink<[i16; 1]>>),
-    MonoU16(  Box<super::Sink<[u16; 1]>>),
-    MonoI24(  Box<super::Sink<[I24; 1]>>),
-    MonoU24(  Box<super::Sink<[U24; 1]>>),
-    MonoI32(  Box<super::Sink<[i32; 1]>>),
-    MonoU32(  Box<super::Sink<[u32; 1]>>),
-    MonoI64(  Box<super::Sink<[i64; 1]>>),
-    MonoU64(  Box<super::Sink<[u64; 1]>>),
-    MonoF32(  Box<super::Sink<[f32; 1]>>),
-    MonoF64(  Box<super::Sink<[f64; 1]>>),
-    StereoI8( Box<super::Sink<[i8;  2]>>),
-    StereoU8( Box<super::Sink<[u8;  2]>>),
-    StereoI16(Box<super::Sink<[i16; 2]>>),
-    StereoU16(Box<super::Sink<[u16; 2]>>),
-    StereoI24(Box<super::Sink<[I24; 2]>>),
-    StereoU24(Box<super::Sink<[U24; 2]>>),
-    StereoI32(Box<super::Sink<[i32; 2]>>),
-    StereoU32(Box<super::Sink<[u32; 2]>>),
-    StereoI64(Box<super::Sink<[i64; 2]>>),
-    StereoU64(Box<super::Sink<[u64; 2]>>),
-    StereoF32(Box<super::Sink<[f32; 2]>>),
-    StereoF64(Box<super::Sink<[f64; 2]>>),
-}
-
 pub enum Audio {
     Source(Source),
     Seek(Seek),
