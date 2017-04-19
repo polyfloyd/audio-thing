@@ -333,6 +333,14 @@ unsafe extern "C" fn eof_cb<R>(_: *const FLAC__StreamDecoder, client_data: *mut 
 unsafe extern "C" fn metadata_cb<R>(_: *const FLAC__StreamDecoder, metadata: *const FLAC__StreamMetadata, client_data: *mut os::raw::c_void)
     where R: io::Read + io::Seek + SeekExt {
     let mut data = (client_data as *mut DecoderCallbackData<R>).as_mut().unwrap();
+    let mut meta = match data.meta.as_mut() {
+        Some(meta) => meta,
+        None => {
+            warn!("picuture encountered after initialisation");
+            return;
+        },
+    };
+
     match (*metadata).type_ {
         FLAC__METADATA_TYPE_VORBIS_COMMENT => {
             let comment = (*metadata).data.vorbis_comment.as_ref();
@@ -341,13 +349,6 @@ unsafe extern "C" fn metadata_cb<R>(_: *const FLAC__StreamDecoder, metadata: *co
                 .filter_map(|c| entry_as_str(c))
                 .filter_map(|s| s.find('=').map(|i| (s, i)))
                 .filter(|&(ref s, ref i)| s[*i..].trim().len() > 0);
-            let mut meta = match data.meta.as_mut() {
-                Some(meta) => meta,
-                None => {
-                    warn!("Vorbis Comment encountered after initialisation");
-                    return;
-                },
-            };
             for (s, i) in strings {
                 let (key, value) = s.split_at(i);
                 let value = value[1..].trim();
@@ -370,6 +371,53 @@ unsafe extern "C" fn metadata_cb<R>(_: *const FLAC__StreamDecoder, metadata: *co
                 frame.content = id3::frame::Content::Text(value.to_string());
                 meta.tag.as_mut().unwrap().push(frame);
             }
+        },
+        FLAC__METADATA_TYPE_PICTURE => {
+            let picture = (*metadata).data.picture.as_ref();
+            let mime = match ffi::CStr::from_ptr(picture.mime_type).to_str() {
+                Ok(s) => s,
+                Err(err) => {
+                    error!("{}", err);
+                    return;
+                },
+            };
+            let description = ffi::CStr::from_ptr(picture.description as *mut i8)
+                .to_string_lossy()
+                .to_string();
+            use id3::frame::PictureType;
+            let typ = match picture.type_ {
+                FLAC__STREAM_METADATA_PICTURE_TYPE_FILE_ICON_STANDARD => PictureType::Icon,
+                FLAC__STREAM_METADATA_PICTURE_TYPE_FILE_ICON => PictureType::OtherIcon,
+                FLAC__STREAM_METADATA_PICTURE_TYPE_FRONT_COVER => PictureType::CoverFront,
+                FLAC__STREAM_METADATA_PICTURE_TYPE_BACK_COVER => PictureType::CoverBack,
+                FLAC__STREAM_METADATA_PICTURE_TYPE_LEAFLET_PAGE => PictureType::Leaflet,
+                FLAC__STREAM_METADATA_PICTURE_TYPE_MEDIA => PictureType::Media,
+                FLAC__STREAM_METADATA_PICTURE_TYPE_LEAD_ARTIST => PictureType::LeadArtist,
+                FLAC__STREAM_METADATA_PICTURE_TYPE_ARTIST => PictureType::Artist,
+                FLAC__STREAM_METADATA_PICTURE_TYPE_CONDUCTOR => PictureType::Conductor,
+                FLAC__STREAM_METADATA_PICTURE_TYPE_BAND => PictureType::Band,
+                FLAC__STREAM_METADATA_PICTURE_TYPE_COMPOSER => PictureType::Composer,
+                FLAC__STREAM_METADATA_PICTURE_TYPE_LYRICIST => PictureType::Lyricist,
+                FLAC__STREAM_METADATA_PICTURE_TYPE_RECORDING_LOCATION => PictureType::RecordingLocation,
+                FLAC__STREAM_METADATA_PICTURE_TYPE_DURING_RECORDING => PictureType::DuringRecording,
+                FLAC__STREAM_METADATA_PICTURE_TYPE_DURING_PERFORMANCE => PictureType::DuringPerformance,
+                FLAC__STREAM_METADATA_PICTURE_TYPE_VIDEO_SCREEN_CAPTURE => PictureType::ScreenCapture,
+                FLAC__STREAM_METADATA_PICTURE_TYPE_FISH => PictureType::BrightFish,
+                FLAC__STREAM_METADATA_PICTURE_TYPE_ILLUSTRATION => PictureType::Illustration,
+                FLAC__STREAM_METADATA_PICTURE_TYPE_BAND_LOGOTYPE => PictureType::BandLogo,
+                FLAC__STREAM_METADATA_PICTURE_TYPE_PUBLISHER_LOGOTYPE => PictureType::PublisherLogo,
+                _ => PictureType::Other,
+            };
+            let mut data = Vec::with_capacity(picture.data_length as usize);
+            data.extend_from_slice(slice::from_raw_parts(picture.data, picture.data_length as usize));
+            let mut frame = id3::Frame::new("APIC");
+            frame.content = id3::frame::Content::Picture(id3::frame::Picture{
+                mime_type: mime.to_string(),
+                picture_type: typ,
+                description: description,
+                data: data,
+            });
+            meta.tag.as_mut().unwrap().push(frame);
         },
         _ => (),
     }
