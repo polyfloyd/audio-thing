@@ -179,27 +179,22 @@ impl<F, R> Seekable for Decoder<F, R>
     where F: sample::Frame,
           F::Sample: DecodeSample,
           R: io::Read + io::Seek + SeekExt {
-    fn seek(&mut self, pos: io::SeekFrom) -> Result<u64, SeekError> {
-        let abs_pos = match pos {
-            io::SeekFrom::Start(i) => i as i64,
-            io::SeekFrom::End(i) => (self.length() as i64 + i),
-            io::SeekFrom::Current(i) => (self.current_position() as i64 + i),
-        };
-        if abs_pos < 0 || abs_pos >= self.length() as i64 {
+    fn seek(&mut self, position: u64) -> Result<(), SeekError> {
+        if position >= self.length() {
             return Err(SeekError::OutofRange{
-                pos: abs_pos,
+                pos: position,
                 size: self.length(),
-            })
+            });
         }
         unsafe {
-            if FLAC__stream_decoder_seek_absolute(self.decoder, abs_pos as u64) != 1 {
+            if FLAC__stream_decoder_seek_absolute(self.decoder, position) != 1 {
                 let state = FLAC__stream_decoder_get_state(self.decoder);
                 return Err(SeekError::Other(Box::from(Error::BadState(state))));
             }
         }
         self.current_sample = 0;
-        self.abs_position = abs_pos as u64;
-        Ok(self.abs_position)
+        self.abs_position = position;
+        Ok(())
     }
 
     fn length(&self) -> u64 {

@@ -16,10 +16,9 @@ pub trait Source: iter::Iterator
 /// `Seekable` and `Seek` is to allow seeking without templating by taking a reference from a
 /// `Seek`. Prefer `Seek` if possible.
 pub trait Seekable {
-    /// Seeks to the frame with the position specified by pos. The proceeding calls to next()
-    /// should yield the frame at the specified index.
-    /// The new index is returned on success.
-    fn seek(&mut self, pos: io::SeekFrom) -> Result<u64, SeekError>;
+    /// Seeks to the frame at the specified position. The proceeding calls to next()
+    /// should yield the frame at that position.
+    fn seek(&mut self, position: u64) -> Result<(), SeekError>;
     /// Returns the total number of frames in the stream.
     fn length(&self) -> u64;
     /// Retrieves the index of the frame that will be read next.
@@ -37,7 +36,7 @@ pub trait Seek: Source + Seekable
 pub enum SeekError {
     Other(Box<error::Error>),
     OutofRange{
-        pos: i64,
+        pos: u64,
         size: u64,
     },
 }
@@ -148,8 +147,8 @@ impl<S> Source for Shared<S>
 impl<S> Seekable for Shared<S>
     where S: Source + Seekable,
           S::Item: sample::Frame {
-    fn seek(&mut self, pos: io::SeekFrom) -> Result<u64, SeekError> {
-        self.input.lock().unwrap().seek(pos)
+    fn seek(&mut self, position: u64) -> Result<(), SeekError> {
+        self.input.lock().unwrap().seek(position)
     }
 
     fn length(&self) -> u64 {
@@ -183,8 +182,8 @@ impl<T> Source for Box<T>
 
 impl<T> Seekable for Box<T>
     where T: Seekable + ?Sized {
-    fn seek(&mut self, pos: io::SeekFrom) -> Result<u64, SeekError> {
-        self.deref_mut().seek(pos)
+    fn seek(&mut self, position: u64) -> Result<(), SeekError> {
+        self.deref_mut().seek(position)
     }
 
     fn length(&self) -> u64 {

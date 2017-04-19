@@ -249,7 +249,9 @@ impl Playback {
     pub fn seek(&mut self, position: u64) {
         self.seekable
             .as_ref()
-            .map(|s| s.lock().unwrap().seek(io::SeekFrom::Start(position)));
+            .map(|s| s.lock().unwrap().seek(position))
+            .unwrap_or(Ok(()))
+            .unwrap(); // FIXME
     }
 
     /// Seeks using a duration.

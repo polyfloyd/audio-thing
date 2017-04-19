@@ -225,24 +225,19 @@ impl<R, F, B> Seekable for Decoder<R, F, B>
           F: sample::Frame,
           F::Sample: DecodeSample<B>,
           B: ByteOrder {
-    fn seek(&mut self, pos: io::SeekFrom) -> Result<u64, SeekError> {
-        let abs_pos = match pos {
-            io::SeekFrom::Start(i) => i as i64,
-            io::SeekFrom::End(i) => (self.length() as i64 + i),
-            io::SeekFrom::Current(i) => (self.current_position() as i64 + i),
-        };
-        if abs_pos < 0 || abs_pos >= self.length() as i64 {
+    fn seek(&mut self, position: u64) -> Result<(), SeekError> {
+        if position >= self.length() {
             return Err(SeekError::OutofRange{
-                pos: abs_pos,
+                pos: position,
                 size: self.length(),
             });
         }
 
-        let fpos = self.data_range.start + abs_pos as u64 * (self.num_channels * self.bytes_per_sample) as u64;
+        let fpos = self.data_range.start + position * (self.num_channels * self.bytes_per_sample) as u64;
         self.input.seek(io::SeekFrom::Start(fpos))
             .map_err(|err| SeekError::Other(Box::from(err)))?;
-        self.next_sample = abs_pos as u64;
-        Ok(self.next_sample)
+        self.next_sample = position;
+        Ok(())
     }
 
     fn length(&self) -> u64 {

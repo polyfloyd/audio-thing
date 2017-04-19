@@ -202,20 +202,15 @@ impl<F, R> Source for Decoder<F, R>
 impl<F, R> Seekable for Decoder<F, R>
     where F: sample::Frame<Sample=i16>,
           R: io::Read + io::Seek + 'static {
-    fn seek(&mut self, pos: io::SeekFrom) -> Result<u64, SeekError> {
-        let abs_pos = match pos {
-            io::SeekFrom::Start(i) => i,
-            io::SeekFrom::End(i) => (self.length() + i as u64),
-            io::SeekFrom::Current(i) => (self.current_position() + i as u64),
-        };
-        let i = self.index.frame_for_sample(abs_pos)
-            .ok_or(SeekError::OutofRange { pos: abs_pos as i64, size: self.length() })?;
+    fn seek(&mut self, position: u64) -> Result<(), SeekError> {
+        let i = self.index.frame_for_sample(position)
+            .ok_or(SeekError::OutofRange { pos: position, size: self.length() })?;
         self.next_frame = i;
-        self.next_sample = abs_pos as usize - self.index.frames[i].sample_offset as usize;
+        self.next_sample = position as usize - self.index.frames[i].sample_offset as usize;
         self.samples_available = 0;
         assert!(self.next_frame < self.index.frames.len());
         assert!(self.next_sample < MAX_FRAME_SIZE);
-        Ok(abs_pos)
+        Ok(())
     }
 
     fn length(&self) -> u64 {
