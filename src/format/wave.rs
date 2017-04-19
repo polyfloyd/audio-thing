@@ -1,5 +1,4 @@
 use std::*;
-use std::collections::HashMap;
 use byteorder::{ByteOrder, BigEndian, LittleEndian};
 use id3;
 use regex::bytes;
@@ -51,7 +50,7 @@ pub fn decode<R>(mut input: R) -> Result<(dyn::Audio, format::Metadata), Error>
         sample_size: u16,
     }
     let mut fmt = None;
-    let mut tags = None;
+    let mut id3_tag = None;
     let mut data_range = None;
 
     // Read all chunks in the file until we reach the end.
@@ -75,8 +74,7 @@ pub fn decode<R>(mut input: R) -> Result<(dyn::Audio, format::Metadata), Error>
             },
 
             b"id3 " => {
-                let id3_tag = id3::Tag::read_from(&mut input)?;
-                tags = Some(format::tags_from_id3(id3_tag));
+                id3_tag = Some(id3::Tag::read_from(&mut input)?);
             },
 
             b"data" => {
@@ -117,7 +115,7 @@ pub fn decode<R>(mut input: R) -> Result<(dyn::Audio, format::Metadata), Error>
     let meta = format::Metadata {
         sample_rate: fmt.sample_rate,
         num_samples: Some((data_range.end - data_range.start) / (fmt.num_channels * fmt.sample_size / 8) as u64),
-        tags: tags.unwrap_or_else(HashMap::new),
+        tag: id3_tag,
     };
 
     macro_rules! dyn_type {

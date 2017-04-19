@@ -1,7 +1,7 @@
 use std::*;
 use std::borrow::Cow;
-use std::collections::HashMap;
 use std::ops::DerefMut;
+use id3;
 use libflac_sys::*;
 use sample::{self, I24};
 use ::audio::*;
@@ -47,7 +47,7 @@ pub fn decode<R>(input: R) -> Result<(dyn::Audio, format::Metadata), Error>
             meta: Some(format::Metadata {
                 sample_rate: 0,
                 num_samples: None,
-                tags: HashMap::new(),
+                tag: Some(id3::Tag::new()),
             }),
         });
 
@@ -351,7 +351,24 @@ unsafe extern "C" fn metadata_cb<R>(_: *const FLAC__StreamDecoder, metadata: *co
             for (s, i) in strings {
                 let (key, value) = s.split_at(i);
                 let value = value[1..].trim();
-                meta.tags.insert(key.to_lowercase().replace(&[' ', '_'][..], ""), value.into());
+                let id3_id = match key.to_lowercase().replace(&[' ', '_'][..], "").as_str() {
+                    "album" => "TALB",
+                    "albumartist" => "TPE2",
+                    "artist" => "TPE1",
+                    "date" => "TDRL",
+                    "disc"|"discnumber" => "TPOS",
+                    "genre" => "TCON",
+                    "software" => "TSSE",
+                    "title" => "TIT2",
+                    "track"|"tracknumber" => "TRCK",
+                    unk => {
+                        warn!("could not translate \"{}\" to id3", unk);
+                        continue;
+                    },
+                };
+                let mut frame = id3::Frame::new(id3_id);
+                frame.content = id3::frame::Content::Text(value.to_string());
+                meta.tag.as_mut().unwrap().push(frame);
             }
         },
         _ => (),
@@ -475,10 +492,11 @@ mod tests {
         let (_, meta) = decode(fs::File::open(path::Path::new(testfile())).unwrap()).unwrap();
         assert_eq!(44100, meta.sample_rate);
         assert_ne!(0, meta.num_samples.unwrap());
-        assert!(meta.tags.values().any(|v| v == "Lucy in the Cloud with Sine Waves"));
-        assert!(meta.tags.values().any(|v| v == "The B-Trees"));
-        assert!(meta.tags.values().any(|v| v == "Dark Sine of the Moon"));
-        assert!(meta.tags.values().any(|v| v == "1984"));
-        assert!(meta.tags.values().any(|v| v == "Various Artists"));
+        let tag = meta.tag.unwrap();
+        assert_eq!(tag.title().unwrap(), "Lucy in the Cloud with Sine Waves");
+        assert_eq!(tag.artist().unwrap(), "The B-Trees");
+        assert_eq!(tag.album().unwrap(), "Dark Sine of the Moon");
+        assert_eq!(tag.date_released().unwrap(), id3::Timestamp::parse("1984").unwrap());
+        assert_eq!(tag.album_artist().unwrap(), "Various Artists");
     }
 }

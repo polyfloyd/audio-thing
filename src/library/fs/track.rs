@@ -106,26 +106,27 @@ impl<'a> library::TrackInfo for MetadataTrack<'a> {
         lazy_static! {
             static ref FROM_STEM: Regex = Regex::new(r"^(?:.* - .*)* - (.+)$").unwrap();
         }
-        self.meta.tags.get("title")
-            .map(|t| t.clone())
+        self.meta.tag.as_ref()
+            .and_then(|t| t.title())
+            .map(|t| Cow::Borrowed(t))
             .unwrap_or_else(|| {
                 let stem = self.path.file_stem()
                     .unwrap()
                     .to_string_lossy();
                 FROM_STEM.captures(&*stem)
                     .and_then(|cap| cap.get(1))
-                    .map(|m| m.as_str().into())
-                    .unwrap_or_else(|| stem.into())
+                    .map(|m| m.as_str().to_string().into())
+                    .unwrap_or(stem)
             })
-            .into()
     }
 
     fn artists(&self) -> Cow<[String]> {
         lazy_static! {
             static ref FROM_STEM: Regex = Regex::new(r"^(?:.* - )(.+) - (:?.+)$").unwrap();
         }
-        self.meta.tags.get("artist")
-            .map(|a| vec![a.clone()])
+        self.meta.tag.as_ref()
+            .and_then(|t| t.artist())
+            .map(|a| vec![a.to_string()])
             .unwrap_or_else(|| {
                 let stem = self.path.file_stem()
                     .unwrap()
@@ -143,7 +144,8 @@ impl<'a> library::TrackInfo for MetadataTrack<'a> {
     }
 
     fn genres(&self) -> Cow<[String]> {
-        self.meta.tags.get("genre")
+        self.meta.tag.as_ref()
+            .and_then(|t| t.genre())
             .map(|g| {
                 g.split(',')
                     .map(|t| t.trim().to_string())
@@ -154,28 +156,32 @@ impl<'a> library::TrackInfo for MetadataTrack<'a> {
     }
 
     fn album_title(&self) -> Option<Cow<str>> {
-        self.meta.tags.get("album")
-            .map(|t| Cow::Owned(t.clone()))
+        self.meta.tag.as_ref()
+            .and_then(|t| t.album())
+            .map(|t| Cow::Borrowed(t))
     }
 
     fn album_artists(&self) -> Cow<[String]> {
-        self.meta.tags.get("albumartist")
-            .map(|a| vec![a.clone()])
+        self.meta.tag.as_ref()
+            .and_then(|t| t.album_artist())
+            .map(|a| vec![a.to_string()])
             .unwrap_or(vec![])
             .into()
     }
 
     fn album_disc(&self) -> Option<i32> {
-        self.meta.tags.get("discnumber")
-            .and_then(|t| t.parse().ok())
+        self.meta.tag.as_ref()
+            .and_then(|t| t.disc())
+            .map(|i| i as i32)
     }
 
     fn album_track(&self) -> Option<i32> {
         lazy_static! {
             static ref FROM_STEM: Regex = Regex::new(r"^0*([1-9]\d*)").unwrap();
         }
-        self.meta.tags.get("tracknumber")
-            .and_then(|t| t.parse().ok())
+        self.meta.tag.as_ref()
+            .and_then(|t| t.track())
+            .map(|i| i as i32)
             .or_else(|| {
                 let stem = self.path.file_stem()
                     .unwrap()
@@ -191,15 +197,12 @@ impl<'a> library::TrackInfo for MetadataTrack<'a> {
     }
 
     fn release(&self) -> Option<library::Release> {
-        self.meta.tags.get("date").into_iter()
-            .chain(self.meta.tags.get("retaildate").into_iter())
-            .filter_map(|t| t.parse().ok())
-            .fold(None, |acc: Option<library::Release>, b| {
-                match acc {
-                    None => Some(b),
-                    Some(acc) => Some(acc.most_precise(b)),
-                }
+        self.meta.tag.as_ref()
+            .and_then(|t| t.date_released())
+            .and_then(|time| {
+                time.year.map(|y| (y, time.month.map(|m| m as u32), time.day.map(|d| d as u32)))
             })
+            .map(|(y, m, d)| library::Release::new(y as u32, m, d))
     }
 }
 
@@ -225,7 +228,7 @@ impl<'a> library::Track for MetadataTrack<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashMap;
+    use id3;
     use ::library::TrackInfo;
 
     #[test]
@@ -235,11 +238,13 @@ mod tests {
             meta: format::Metadata {
                 sample_rate: 44100,
                 num_samples: Some(1_000_000),
-                tags: [
-                    ("title", "Sandstorm"),
-                    ("artist", "Darude"),
-                    ("genre", "Trance"),
-                ].into_iter().map(|&(k, v)| (k.into(), v.into())).collect(),
+                tag: {
+                    let mut tag = id3::Tag::new();
+                    tag.set_title("Sandstorm");
+                    tag.set_artist("Darude");
+                    tag.set_genre("Trance");
+                    Some(tag)
+                },
             },
         };
         assert_eq!("Sandstorm", track.title());
@@ -248,13 +253,13 @@ mod tests {
     }
 
     #[test]
-    fn test_tags_from_filename() {
+    fn test_tag_from_filename() {
         let track = MetadataTrack {
             path: path::Path::new("/home/user/Music/01 - Darude - Sandstorm.flac"),
             meta: format::Metadata {
                 sample_rate: 44100,
                 num_samples: Some(1_000_000),
-                tags: HashMap::new(),
+                tag: None,
             },
         };
         assert_eq!("Sandstorm", track.title());

@@ -1,5 +1,4 @@
 use std::*;
-use std::collections::HashMap;
 use id3;
 use regex::bytes;
 use liblame_sys::*;
@@ -87,8 +86,7 @@ pub fn decode<R>(mut input: R) -> Result<(dyn::Audio, format::Metadata), Error>
         let meta = format::Metadata {
             sample_rate: sample_rate,
             num_samples: Some(num_samples),
-            tags: id3_tag.map(|tag| format::tags_from_id3(tag))
-                .unwrap_or_else(HashMap::new),
+            tag: id3_tag,
         };
         macro_rules! dyn_type {
             ($dyn:path) => {

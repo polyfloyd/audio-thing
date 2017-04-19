@@ -14,6 +14,14 @@ pub enum Release {
 }
 
 impl Release {
+    pub fn new(year: u32, month: Option<u32>, day: Option<u32>) -> Release {
+        match (year, month, day) {
+            (y, Some(m), Some(d)) => Release::Day{ year: y, month: m, day: d },
+            (y, Some(m), _) => Release::Month{ year: y, month: m },
+            (y, _, _) => Release::Year{ year: y },
+        }
+    }
+
     /// Takes the most precise of this and another Release in `Year < Month < Day`.
     /// There is no requirement for `self == other`.
     /// If the releases have the same level of accuracy, self is returned.
