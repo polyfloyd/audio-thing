@@ -265,11 +265,11 @@ impl Playback {
         duration_of(self.sample_rate, self.position())
     }
 
-    pub fn playstate(&self) -> State {
+    pub fn state(&self) -> State {
         *self.flow_state.1.lock().unwrap()
     }
 
-    pub fn set_playstate(&mut self, state: State) {
+    pub fn set_state(&mut self, state: State) {
         let &(ref cvar, ref lock) = &*self.flow_state;
         let mut cur_state = lock.lock().unwrap();
         if *cur_state != State::Stopped {

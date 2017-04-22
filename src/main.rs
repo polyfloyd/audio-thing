@@ -37,18 +37,18 @@ fn main() {
 
     let (dyn_input, _) = format::decode_file(&filename).unwrap();
     let mut pb = player::Playback::new(dyn_input, &player::output::pulse::Output{});
-    pb.set_playstate(player::State::Playing);
+    pb.set_state(player::State::Playing);
 
     let stdin = io::stdin();
     for line in stdin.lock().lines() {
         match line.unwrap().as_ref() {
-            "ps" => pb.set_playstate(player::State::Paused),
-            "pl" => pb.set_playstate(player::State::Playing),
+            "ps" => pb.set_state(player::State::Paused),
+            "pl" => pb.set_state(player::State::Playing),
             "st" => {
                 let duration = pb.duration_time()
                     .map(|d| format_duraton(&d))
                     .unwrap_or("∞".to_string());
-                println!("state:    {:?}", pb.playstate());
+                println!("state:    {:?}", pb.state());
                 println!("position: {}/{}", format_duraton(&pb.position_time()), duration);
                 println!("tempo:    {}", pb.tempo());
                 println!("latency:  {}ns", pb.stream.latency().unwrap().subsec_nanos());
