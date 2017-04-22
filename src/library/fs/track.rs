@@ -214,7 +214,9 @@ impl<'a> library::Track for MetadataTrack<'a> {
     }
 
     fn audio(&self) -> Result<dyn::Seek, Box<error::Error>> {
-        unimplemented!();
+        let (decoder, _) = format::decode_file(self.path)?;
+        decoder.into_seek()
+            .ok_or(Box::from(Error::NonSeek))
     }
 
     fn duration(&self) -> time::Duration {
