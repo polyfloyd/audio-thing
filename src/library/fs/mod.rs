@@ -169,11 +169,11 @@ impl library::Library for Filesystem {
         "#)?;
         let mut stmt_artists = db.prepare(r#"
            SELECT "name", "type" FROM "track_artist"
-           WHERE "artist_path" = ?1
+           WHERE "track_path" = ?1
         "#)?;
         let mut stmt_genres = db.prepare(r#"
            SELECT "genre" FROM "track_genre"
-           WHERE "artist_path" = ?1
+           WHERE "track_path" = ?1
         "#)?;
         let tracks: Result<Vec<_>, Box<error::Error>> = stmt_tracks
             .query_and_then(&[], |row| {
