@@ -7,6 +7,7 @@ use xdg;
 use ::format;
 use ::library::{self, Track, TrackInfo};
 
+mod playlist;
 mod track;
 use self::track::*;
 
@@ -154,6 +155,71 @@ impl Filesystem {
         });
 
         Ok(fs)
+    }
+
+    /// TODO: This is pretty much a copy of the `Library::tracks`.
+    /// These functions will be merged in the future when the search API is finished.
+    pub fn track_by_path(&self, path: &path::Path) -> Result<Option<Box<Track>>, Error> {
+        let path = if path.is_absolute() {
+            Cow::Borrowed(path)
+        } else {
+            Cow::Owned(self.root.join(path).canonicalize()?)
+        };
+
+        let db = self.db.lock().unwrap();
+        let mut stmt_tracks = db.prepare(r#"
+           SELECT * FROM "track"
+           WHERE "path" = ?1
+           LIMIT 1
+        "#)?;
+        let mut stmt_artists = db.prepare(r#"
+           SELECT "name", "type" FROM "track_artist"
+           WHERE "track_path" = ?1
+        "#)?;
+        let mut stmt_genres = db.prepare(r#"
+           SELECT "genre" FROM "track_genre"
+           WHERE "track_path" = ?1
+        "#)?;
+        let query_path = path.to_str()
+            .ok_or_else(|| Error::BadPath(path.to_path_buf()))?;
+        let track: Option<Result<RawTrack, Error>> = stmt_tracks
+            .query_and_then(&[&query_path], |row| {
+                let mut track = RawTrack {
+                    path: row.get("path"),
+                    modified_at: time::UNIX_EPOCH
+                        + time::Duration::from_secs(row.get::<_, i64>("modified_at") as _),
+                    duration: time::Duration::from_secs(row.get::<_, i64>("duration") as _),
+                    title: row.get("title"),
+                    artists: vec![],
+                    remixers: vec![],
+                    genres: vec![],
+                    album_title: row.get("album_title"),
+                    album_artists: vec![],
+                    album_disc: row.get("album_disc"),
+                    album_track: row.get("album_track"),
+                    rating: row.get("rating"),
+                    release: row.get("release"),
+                };
+                let artists = stmt_artists.query_map(&[&track.path], |row| (row.get("name"), row.get("type")))?;
+                for artist in artists {
+                    let (name, typ): (_, Option<String>) = artist?;
+                    match typ.as_ref().map(|s| s.as_str()) {
+                        None => track.artists.push(name),
+                        Some("album") => track.album_artists.push(name),
+                        Some("remixer") => track.remixers.push(name),
+                        _ => unreachable!(),
+                    };
+                }
+                for genre in stmt_genres.query_map(&[&track.path], |row| row.get("genre"))? {
+                    track.genres.push(genre?);
+                }
+                Ok(track)
+            })?
+            .next();
+        match track {
+            Some(t) => Ok(Some(Box::from(t?))),
+            None => Ok(None),
+        }
     }
 }
 
@@ -412,7 +478,8 @@ impl From<xdg::BaseDirectoriesError> for Error {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use library::Library;
+    use std::sync::{Arc, Mutex};
+    use library::{Library, Playlist};
 
     const ALBUM: &'static str = "testdata/Various Artists - Dark Sine of the Moon";
 
@@ -479,5 +546,18 @@ mod tests {
         let fs = Filesystem::with_db(db(), path::Path::new(ALBUM)).unwrap();
         thread::sleep(time::Duration::from_secs(1)); // Await initial scan.
         assert_eq!(3, fs.tracks().unwrap().count());
+    }
+
+    #[test]
+    fn playlist_read() {
+        let fs = Filesystem::with_db(db(), path::Path::new(ALBUM)).unwrap();
+        thread::sleep(time::Duration::from_secs(1)); // Await initial scan.
+        let fs = Arc::new(Mutex::new(fs));
+        let playlist = playlist::Playlist {
+            file: "testdata/Various Artists - Dark Sine of the Moon/00 - playlist.m3u".to_string(),
+            fs: Arc::downgrade(&fs),
+        };
+        assert_eq!(3, playlist.len().unwrap());
+        assert_eq!(3, playlist.contents().unwrap().len());
     }
 }
