@@ -8,8 +8,9 @@ pub mod mp3;
 pub mod wave;
 
 
-pub fn decode_file(path: &path::Path) -> Result<(dyn::Audio, Metadata), Error> {
-    debug!("opening {} for decoding", path.to_string_lossy());
+pub fn decode_file<P>(path: P) -> Result<(dyn::Audio, Metadata), Error>
+    where P: AsRef<path::Path> {
+    debug!("opening {} for decoding", path.as_ref().to_string_lossy());
 
     let mut buf = [0; 512];
     let mut file = fs::File::open(path)?;

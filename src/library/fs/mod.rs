@@ -313,10 +313,11 @@ fn track_add_recursive(db: &mut sqlite::Connection, path: &path::Path) -> Result
     Ok(())
 }
 
-fn track_upsert<'a>(db: &mut sqlite::Connection, track: &MetadataTrack<'a>) -> Result<(), Error> {
+fn track_upsert<P>(db: &mut sqlite::Connection, track: &MetadataTrack<P>) -> Result<(), Error>
+    where P: AsRef<path::Path> {
     let tx = db.transaction()?;
-    let path = track.path.to_str()
-        .ok_or(Error::BadPath(track.path.to_path_buf()))?;
+    let path = track.path.as_ref().to_str()
+        .ok_or(Error::BadPath(track.path.as_ref().to_path_buf()))?;
     tx.execute(r#"
         INSERT INTO "track"
         ("path", "modified_at", "duration", "title", "rating", "release", "album_title", "album_disc", "album_track")

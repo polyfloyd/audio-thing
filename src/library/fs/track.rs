@@ -90,18 +90,21 @@ impl library::Track for RawTrack {
 }
 
 
-pub struct MetadataTrack<'a> {
-    pub path: &'a path::Path,
+pub struct MetadataTrack<P>
+    where P: AsRef<path::Path> {
+    pub path: P,
     pub meta: format::Metadata,
 }
 
-impl<'a> library::Identity for MetadataTrack<'a> {
+impl<P> library::Identity for MetadataTrack<P>
+    where P: AsRef<path::Path> {
     fn id(&self) -> (Cow<str>, Cow<str>) {
-        ("fs".into(), self.path.to_string_lossy().into())
+        ("fs".into(), self.path.as_ref().to_string_lossy())
     }
 }
 
-impl<'a> library::TrackInfo for MetadataTrack<'a> {
+impl<P> library::TrackInfo for MetadataTrack<P>
+    where P: AsRef<path::Path> {
     fn title(&self) -> Cow<str> {
         lazy_static! {
             static ref FROM_STEM: Regex = Regex::new(r"^(?:.* - .*)* - (.+)$").unwrap();
@@ -110,7 +113,7 @@ impl<'a> library::TrackInfo for MetadataTrack<'a> {
             .and_then(|t| t.title())
             .map(|t| Cow::Borrowed(t))
             .unwrap_or_else(|| {
-                let stem = self.path.file_stem()
+                let stem = self.path.as_ref().file_stem()
                     .unwrap()
                     .to_string_lossy();
                 FROM_STEM.captures(&*stem)
@@ -128,7 +131,7 @@ impl<'a> library::TrackInfo for MetadataTrack<'a> {
             .and_then(|t| t.artist())
             .map(|a| vec![a.to_string()])
             .unwrap_or_else(|| {
-                let stem = self.path.file_stem()
+                let stem = self.path.as_ref().file_stem()
                     .unwrap()
                     .to_string_lossy();
                 FROM_STEM.captures(&*stem)
@@ -183,7 +186,7 @@ impl<'a> library::TrackInfo for MetadataTrack<'a> {
             .and_then(|t| t.track())
             .map(|i| i as i32)
             .or_else(|| {
-                let stem = self.path.file_stem()
+                let stem = self.path.as_ref().file_stem()
                     .unwrap()
                     .to_string_lossy();
                 FROM_STEM.captures(&*stem)
@@ -206,15 +209,16 @@ impl<'a> library::TrackInfo for MetadataTrack<'a> {
     }
 }
 
-impl<'a> library::Track for MetadataTrack<'a> {
+impl<P> library::Track for MetadataTrack<P>
+    where P: AsRef<path::Path> {
     fn modified_at(&self) -> Option<time::SystemTime> {
-        fs::metadata(self.path)
+        fs::metadata(&self.path)
             .and_then(|stat| stat.modified())
             .ok()
     }
 
     fn audio(&self) -> Result<dyn::Seek, Box<error::Error>> {
-        let (decoder, _) = format::decode_file(self.path)?;
+        let (decoder, _) = format::decode_file(&self.path)?;
         decoder.into_seek()
             .ok_or(Box::from(Error::NonSeek))
     }
