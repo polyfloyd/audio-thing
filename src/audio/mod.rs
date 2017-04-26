@@ -77,7 +77,7 @@ pub fn duration_of(sample_rate: u32, num_samples: u64) -> time::Duration {
 
 pub trait Sink<F>
     where F: sample::Frame {
-    fn write_frame(&mut self, frame: F) -> Result<(), Box<error::Error>>;
+    fn write_frame(&mut self, frame: F) -> Result<(), Box<error::Error + Send>>;
     /// See `Source::sample_rate`.
     fn sample_rate(&self) -> u32;
 }

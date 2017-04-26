@@ -91,20 +91,20 @@ impl library::Track for RawTrack {
 
 
 pub struct MetadataTrack<P>
-    where P: AsRef<path::Path> {
+    where P: AsRef<path::Path> + Send + Sync {
     pub path: P,
     pub meta: format::Metadata,
 }
 
 impl<P> library::Identity for MetadataTrack<P>
-    where P: AsRef<path::Path> {
+    where P: AsRef<path::Path> + Send + Sync {
     fn id(&self) -> (Cow<str>, Cow<str>) {
         ("fs".into(), self.path.as_ref().to_string_lossy())
     }
 }
 
 impl<P> library::TrackInfo for MetadataTrack<P>
-    where P: AsRef<path::Path> {
+    where P: AsRef<path::Path> + Send + Sync {
     fn title(&self) -> Cow<str> {
         lazy_static! {
             static ref FROM_STEM: Regex = Regex::new(r"^(?:.* - .*)* - (.+)$").unwrap();
@@ -210,7 +210,7 @@ impl<P> library::TrackInfo for MetadataTrack<P>
 }
 
 impl<P> library::Track for MetadataTrack<P>
-    where P: AsRef<path::Path> {
+    where P: AsRef<path::Path> + Send + Sync {
     fn modified_at(&self) -> Option<time::SystemTime> {
         fs::metadata(&self.path)
             .and_then(|stat| stat.modified())

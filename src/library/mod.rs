@@ -1,5 +1,6 @@
 use std::*;
 use std::borrow::Cow;
+use std::sync::{Arc, Mutex};
 use ::audio::*;
 
 pub mod fs;
@@ -31,7 +32,7 @@ impl Identity for Audio {
 }
 
 
-pub trait Identity {
+pub trait Identity: Send + Sync {
     /// Returns the library name, equal to `Library::name()` and a string that uniquely identifies
     /// an item in its library.
     fn id(&self) -> (Cow<str>, Cow<str>);

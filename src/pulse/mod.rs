@@ -62,11 +62,15 @@ impl<F> Sink<F>
 
 impl<F> audio::Sink<F> for Sink<F>
     where F: sample::Frame {
-    fn write_frame(&mut self, frame: F) -> Result<(), Box<error::Error>> {
+    fn write_frame(&mut self, frame: F) -> Result<(), Box<error::Error + Send>> {
         unsafe {
             debug_assert_eq!(mem::size_of::<F>(), F::n_channels() * mem::size_of::<F::Sample>());
             let buf = slice::from_raw_parts(mem::transmute::<&F, *const u8>(&frame), mem::size_of::<F>());
-            try!(self.conn.write(buf));
+            match self.conn.write(buf) {
+                // From<T> does not work well with T + Send :(
+                Ok(_) => (),
+                Err(ioerr) => return Err(Box::new(ioerr)),
+            };
             Ok(())
         }
     }

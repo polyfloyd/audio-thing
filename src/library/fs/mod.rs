@@ -314,7 +314,7 @@ fn track_add_recursive(db: &mut sqlite::Connection, path: &path::Path) -> Result
 }
 
 fn track_upsert<P>(db: &mut sqlite::Connection, track: &MetadataTrack<P>) -> Result<(), Error>
-    where P: AsRef<path::Path> {
+    where P: AsRef<path::Path> + Send + Sync {
     let tx = db.transaction()?;
     let path = track.path.as_ref().to_str()
         .ok_or(Error::BadPath(track.path.as_ref().to_path_buf()))?;

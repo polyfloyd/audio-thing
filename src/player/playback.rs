@@ -6,6 +6,15 @@ use ::filter::*;
 use ::player::output;
 
 
+#[derive(Debug)]
+pub enum Event {
+    Position(u64),
+    State(State),
+    Tempo(f64),
+    Output(output::Event),
+}
+
+
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum State {
     Playing,
@@ -22,24 +31,26 @@ pub struct Playback {
     sample_counter: Arc<Mutex<u64>>,
 
     tempo: Option<Arc<Mutex<f64>>>,
-    seekable: Option<Arc<Mutex<Seekable>>>,
+    seekable: Option<Arc<Mutex<Seekable + Send>>>,
+
+    event_handler: Arc<Fn(Event) + Send + Sync>,
 }
 
 impl Playback {
     /// Initializes a new Playback. Playback should be started manually by setting the playstate to
     /// Playing.
-    pub fn new(audio: dyn::Audio, output: &output::Output) -> Playback {
+    pub fn new(audio: dyn::Audio, output: &output::Output, event_handler: Arc<Fn(Event) + Send + Sync>) -> Playback {
         match audio {
             dyn::Audio::Source(source) => {
-                Playback::from_source(source, output)
+                Playback::from_source(source, output, event_handler)
             },
             dyn::Audio::Seek(seek) => {
-                Playback::from_seek(seek, output)
+                Playback::from_seek(seek, output, event_handler)
             },
         }
     }
 
-    fn from_source(source: dyn::Source, output: &output::Output) -> Playback {
+    fn from_source(source: dyn::Source, output: &output::Output, event_handler: Arc<Fn(Event) + Send + Sync>) -> Playback {
         let flow_state = Arc::new((Condvar::new(), Mutex::new(State::Paused)));
         let sample_counter = Arc::new(Mutex::new(0));
 
@@ -77,22 +88,30 @@ impl Playback {
             dyn::Source::StereoF64(s) => dyn::Source::StereoF64(with_control(s, &flow_state, &sample_counter)),
         };
 
+        let eh_sub = event_handler.clone();
+        let sub_handler = Arc::new(move |event| {
+            if let output::Event::End = event {
+                eh_sub(Event::State(State::Stopped));
+            }
+            eh_sub(Event::Output(event));
+        });
         Playback {
             sample_rate: source_out.sample_rate(),
-            stream: output.consume(source_out).unwrap(),
+            stream: output.consume(source_out, sub_handler).unwrap(),
             flow_state: flow_state,
             sample_counter: sample_counter,
             tempo: None,
             seekable: None,
+            event_handler: event_handler,
         }
     }
 
-    fn from_seek(seek: dyn::Seek, output: &output::Output) -> Playback {
+    fn from_seek(seek: dyn::Seek, output: &output::Output, event_handler: Arc<Fn(Event) + Send + Sync>) -> Playback {
         let flow_state = Arc::new((Condvar::new(), Mutex::new(State::Paused)));
         let sample_counter = Arc::new(Mutex::new(0));
         let tempo = Arc::new(Mutex::new(1.0));
 
-        fn with_control<I>(seek: I, fs: &Arc<(Condvar, Mutex<State>)>, sc: &Arc<Mutex<u64>>, t: &Arc<Mutex<f64>>) -> (Box<Source<Item=I::Item> + Send>, Arc<Mutex<Seekable>>)
+        fn with_control<I>(seek: I, fs: &Arc<(Condvar, Mutex<State>)>, sc: &Arc<Mutex<u64>>, t: &Arc<Mutex<f64>>) -> (Box<Source<Item=I::Item> + Send>, Arc<Mutex<Seekable + Send>>)
             where I: Seek + Send + 'static,
                   I::Item: sample::Frame + Send,
                   <I::Item as sample::Frame>::Float: Send,
@@ -210,13 +229,21 @@ impl Playback {
             },
         };
 
+        let eh_sub = event_handler.clone();
+        let sub_handler = Arc::new(move |event| {
+            if let output::Event::End = event {
+                eh_sub(Event::State(State::Stopped));
+            }
+            eh_sub(Event::Output(event));
+        });
         Playback {
             sample_rate: source_out.sample_rate(),
-            stream: output.consume(source_out).unwrap(),
+            stream: output.consume(source_out, sub_handler).unwrap(),
             flow_state: flow_state,
             sample_counter: sample_counter,
             tempo: Some(tempo),
             seekable: Some(mut_seek),
+            event_handler: event_handler,
         }
     }
 
@@ -246,18 +273,19 @@ impl Playback {
 
     /// Seeks to the sample at the specified position. If seeking is not supported, this is a
     /// no-op.
-    pub fn seek(&mut self, position: u64) {
+    pub fn set_position(&mut self, position: u64) {
         self.seekable
             .as_ref()
             .map(|s| s.lock().unwrap().seek(position))
             .unwrap_or(Ok(()))
             .unwrap(); // FIXME
+        (self.event_handler)(Event::Position(position));
     }
 
     /// Seeks using a duration.
-    pub fn seek_time(&mut self, timestamp: time::Duration) {
+    pub fn set_position_time(&mut self, timestamp: time::Duration) {
         let secs = timestamp.as_secs() * self.sample_rate as u64;
-        self.seek(secs);
+        self.set_position(secs);
     }
 
     /// Returns the current position as a Duration.
@@ -276,6 +304,7 @@ impl Playback {
             *cur_state = state;
         }
         cvar.notify_all();
+        (self.event_handler)(Event::State(state));
     }
 
     pub fn tempo(&self) -> f64 {
@@ -292,6 +321,7 @@ impl Playback {
         if tempo > 0.0 {
             if let Some(ref t) = self.tempo {
                 *t.lock().unwrap() = tempo;
+                (self.event_handler)(Event::Tempo(tempo));
             }
         }
     }

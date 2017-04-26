@@ -16,6 +16,7 @@ extern crate liblame_sys;
 extern crate libpulse_sys;
 use std::*;
 use std::io::BufRead;
+use ::library::Library;
 
 mod audio;
 mod filter;
@@ -31,36 +32,71 @@ fn main() {
         badlog::init(Some("debug"));
     }
 
-    let filename = env::args().nth(1)
-        .map(path::PathBuf::from)
-        .expect("$1 should be an audio file");
+    let fs = library::fs::Filesystem::new(path::Path::new("testdata")).unwrap();
 
-    let (dyn_input, _) = format::decode_file(&filename).unwrap();
-    let mut pb = player::Playback::new(dyn_input, &player::output::pulse::Output{});
-    pb.set_state(player::State::Playing);
+    let player = player::Player::new(Box::new(player::output::pulse::Output{}));
+    let mut managed_id = None;
 
     let stdin = io::stdin();
-    for line in stdin.lock().lines() {
-        match line.unwrap().as_ref() {
-            "ps" => pb.set_state(player::State::Paused),
-            "pl" => pb.set_state(player::State::Playing),
-            "st" => {
-                let duration = pb.duration_time()
-                    .map(|d| format_duraton(&d))
-                    .unwrap_or("∞".to_string());
-                println!("state:    {:?}", pb.state());
-                println!("position: {}/{}", format_duraton(&pb.position_time()), duration);
-                println!("tempo:    {}", pb.tempo());
-                println!("latency:  {}ns", pb.stream.latency().unwrap().subsec_nanos());
+    let mut lines = stdin.lock().lines();
+    while let Some(Ok(line)) = lines.next() {
+        let mut p = player.lock().unwrap();
+        match line.as_ref() {
+            "ls" => {
+                let tracks: Vec<_> = fs.tracks().unwrap()
+                    .collect();
+                for (i, track) in tracks.iter().enumerate() {
+                    println!("{}: {} - {}", i, track.artists().get(0).unwrap_or(&"?".to_string()), track.title());
+                }
+                let track = lines.next().unwrap()
+                    .unwrap_or("q".to_string())
+                    .parse()
+                    .ok()
+                    .and_then(|index| tracks.into_iter().nth(index));
+                if let Some(track) = track {
+                    p.queue.push(sync::Arc::new(library::Audio::Track(track)));
+                    managed_id.as_ref()
+                        .and_then(|id| p.playing.get_mut(id))
+                        .map(|&mut (_, ref mut pb)| pb.set_state(player::State::Stopped));
+                    let (id, _) = p.play_next_from_queue().unwrap().unwrap();
+                    managed_id = Some(id);
+                }
             },
+
+            "ps" => {
+                if let Some(&mut (_, ref mut pb)) = managed_id.as_ref().and_then(|id| p.playing.get_mut(id)) {
+                    pb.set_state(player::State::Paused);
+                }
+            },
+            "pl" => {
+                if let Some(&mut (_, ref mut pb)) = managed_id.as_ref().and_then(|id| p.playing.get_mut(id)) {
+                    pb.set_state(player::State::Playing);
+                }
+            },
+            "st" => {
+                if let Some(&mut (_, ref mut pb)) = managed_id.as_ref().and_then(|id| p.playing.get_mut(id)) {
+                    let duration = pb.duration_time()
+                        .map(|d| format_duraton(&d))
+                        .unwrap_or("∞".to_string());
+                    println!("state:    {:?}", pb.state());
+                    println!("position: {}/{}", format_duraton(&pb.position_time()), duration);
+                    println!("tempo:    {}", pb.tempo());
+                    println!("latency:  {}ns", pb.stream.latency().unwrap().subsec_nanos());
+                }
+            },
+
             l if l.starts_with(":") => {
-                if let Ok(t) = l[1..].parse() {
-                    pb.seek_time(time::Duration::new(t, 0));
+                if let Some(&mut (_, ref mut pb)) = managed_id.as_ref().and_then(|id| p.playing.get_mut(id)) {
+                    if let Ok(t) = l[1..].parse() {
+                        pb.set_position_time(time::Duration::new(t, 0));
+                    }
                 }
             },
             l => {
-                if let Ok(r) = l.parse() {
-                    pb.set_tempo(r);
+                if let Some(&mut (_, ref mut pb)) = managed_id.as_ref().and_then(|id| p.playing.get_mut(id)) {
+                    if let Ok(r) = l.parse() {
+                        pb.set_tempo(r);
+                    }
                 }
             },
         }
