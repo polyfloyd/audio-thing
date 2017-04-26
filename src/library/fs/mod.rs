@@ -5,7 +5,7 @@ use notify::{self, Watcher};
 use rusqlite as sqlite;
 use xdg;
 use ::format;
-use ::library::{self, Track, TrackInfo};
+use ::library::{self, Library, Track, TrackInfo};
 
 mod playlist;
 mod track;
@@ -157,69 +157,18 @@ impl Filesystem {
         Ok(fs)
     }
 
-    /// TODO: This is pretty much a copy of the `Library::tracks`.
-    /// These functions will be merged in the future when the search API is finished.
-    pub fn track_by_path(&self, path: &path::Path) -> Result<Option<Box<Track>>, Error> {
+    /// TODO: This function will be removed in the future when the search API is finished.
+    pub fn track_by_path(&self, path: &path::Path) -> Result<Option<Box<Track>>, Box<error::Error>> {
         let path = if path.is_absolute() {
-            Cow::Borrowed(path)
+            path.canonicalize()?
         } else {
-            Cow::Owned(self.root.join(path).canonicalize()?)
+            self.root.join(path).canonicalize()?
         };
-
-        let db = self.db.lock().unwrap();
-        let mut stmt_tracks = db.prepare(r#"
-           SELECT * FROM "track"
-           WHERE "path" = ?1
-           LIMIT 1
-        "#)?;
-        let mut stmt_artists = db.prepare(r#"
-           SELECT "name", "type" FROM "track_artist"
-           WHERE "track_path" = ?1
-        "#)?;
-        let mut stmt_genres = db.prepare(r#"
-           SELECT "genre" FROM "track_genre"
-           WHERE "track_path" = ?1
-        "#)?;
-        let query_path = path.to_str()
+        let id = path.to_str()
             .ok_or_else(|| Error::BadPath(path.to_path_buf()))?;
-        let track: Option<Result<RawTrack, Error>> = stmt_tracks
-            .query_and_then(&[&query_path], |row| {
-                let mut track = RawTrack {
-                    path: row.get("path"),
-                    modified_at: time::UNIX_EPOCH
-                        + time::Duration::from_secs(row.get::<_, i64>("modified_at") as _),
-                    duration: time::Duration::from_secs(row.get::<_, i64>("duration") as _),
-                    title: row.get("title"),
-                    artists: vec![],
-                    remixers: vec![],
-                    genres: vec![],
-                    album_title: row.get("album_title"),
-                    album_artists: vec![],
-                    album_disc: row.get("album_disc"),
-                    album_track: row.get("album_track"),
-                    rating: row.get("rating"),
-                    release: row.get("release"),
-                };
-                let artists = stmt_artists.query_map(&[&track.path], |row| (row.get("name"), row.get("type")))?;
-                for artist in artists {
-                    let (name, typ): (_, Option<String>) = artist?;
-                    match typ.as_ref().map(|s| s.as_str()) {
-                        None => track.artists.push(name),
-                        Some("album") => track.album_artists.push(name),
-                        Some("remixer") => track.remixers.push(name),
-                        _ => unreachable!(),
-                    };
-                }
-                for genre in stmt_genres.query_map(&[&track.path], |row| row.get("genre"))? {
-                    track.genres.push(genre?);
-                }
-                Ok(track)
-            })?
-            .next();
-        match track {
-            Some(t) => Ok(Some(Box::from(t?))),
-            None => Ok(None),
-        }
+        let track = self.tracks()?
+            .find(|track| track.id().1 == id);
+        Ok(track)
     }
 }
 
@@ -535,6 +484,31 @@ mod tests {
         let db = fs.db.lock().unwrap();
         let num_tracks = db.query_row("SELECT COUNT(*) FROM \"track\"", &[], |row| row.get(0)).unwrap();
         assert_eq!(3, num_tracks);
+    }
+
+    #[test]
+    fn track_index_conversion() {
+        let fs = Filesystem::with_db(db(), path::Path::new(ALBUM)).unwrap();
+        thread::sleep(time::Duration::from_secs(1)); // Await initial scan.
+        let file = "01 - The B-Trees - Lucy in the Cloud with Sine Waves.flac";
+        let pt = track_from_path(&path::Path::new("testdata/Various Artists - Dark Sine of the Moon").join(file)).unwrap();
+        let db = fs.track_by_path(path::Path::new(file)).unwrap().unwrap();
+        assert_eq!(pt.title(), db.title());
+        assert_eq!(pt.artists(), db.artists());
+        assert_eq!(pt.remixers(), db.remixers());
+        assert_eq!(pt.genres(), db.genres());
+        assert_eq!(pt.album_title(), db.album_title());
+        assert_eq!(pt.album_artists(), db.album_artists());
+        assert_eq!(pt.album_disc(), db.album_disc());
+        assert_eq!(pt.album_track(), db.album_track());
+        assert_eq!(pt.rating(), db.rating());
+        assert_eq!(pt.release(), db.release());
+        let pt_mod = pt.modified_at().unwrap()
+            .duration_since(time::UNIX_EPOCH).unwrap();
+        let db_mod = db.modified_at().unwrap()
+            .duration_since(time::UNIX_EPOCH).unwrap();
+        assert_eq!(pt_mod.as_secs(), db_mod.as_secs());
+        assert_eq!(pt.duration().as_secs(), db.duration().as_secs());
     }
 
     #[test]

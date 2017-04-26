@@ -23,11 +23,11 @@ CREATE TABLE "track_artist" (
     "name" TEXT NOT NULL,
     "type" TEXT,
 
-    PRIMARY KEY ("track_path", "name")
+    PRIMARY KEY ("track_path", "name", "type")
         ON CONFLICT REPLACE,
     FOREIGN KEY ("track_path") REFERENCES "track"("path")
         ON UPDATE CASCADE ON DELETE CASCADE,
-    CHECK ("type" IN ("album", "remixer"))
+    CHECK ("type" IN ('album', 'remixer'))
 );
 
 -- A track has zero or more genres.

@@ -80,7 +80,7 @@ impl library::PlaylistMut for Playlist {
     }
 }
 
-fn read_m3u(fs: &Filesystem, file: &path::Path) -> Result<Vec<library::Audio>, Error> {
+fn read_m3u(fs: &Filesystem, file: &path::Path) -> Result<Vec<library::Audio>, Box<error::Error>> {
     let mut contents = Vec::new();
     for line in io::BufReader::new(fs::File::open(file)?).lines() {
         let line = line?;
