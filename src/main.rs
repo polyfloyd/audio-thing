@@ -35,7 +35,16 @@ fn main() {
     let fs = library::fs::Filesystem::new(path::Path::new("testdata")).unwrap();
 
     let player = player::Player::new(Box::new(player::output::pulse::Output{}));
-    let mut managed_id = None;
+
+    let mut managed_id = env::args().nth(1)
+        .map(|filename| {
+            let mut p = player.lock().unwrap();
+            let path = path::PathBuf::from(filename);
+            let track = library::fs::track_from_path(&path).unwrap();
+            p.queue.push(sync::Arc::new(library::Audio::Track(track)));
+            let (id, _) = p.play_next_from_queue().unwrap().unwrap();
+            id
+        });
 
     let stdin = io::stdin();
     let mut lines = stdin.lock().lines();

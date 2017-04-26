@@ -279,6 +279,15 @@ impl library::Library for Filesystem {
     }
 }
 
+/// Creates an ad-hoc track from a path.
+pub fn track_from_path(path: &path::Path) -> Result<Box<Track>, Error> {
+    let (_, metadata) = format::decode_file(path)?;
+    Ok(Box::new(MetadataTrack {
+        path: path.to_path_buf(),
+        meta: metadata,
+    }))
+}
+
 
 /// Attempts to recursively add or update a file to the index.
 fn track_add_recursive(db: &mut sqlite::Connection, path: &path::Path) -> Result<(), Error> {
