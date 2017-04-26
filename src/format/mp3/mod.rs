@@ -259,7 +259,7 @@ impl fmt::Display for VaFormatter {
             // A buffer two times the format should be enough in most cases.
             let mut buf = vec![0u8; cstr.to_bytes().len() * 2];
             vsnprintf(buf.as_mut_ptr() as *mut i8, buf.len(), self.0, self.1);
-            write!(f, "{}", String::from_utf8_lossy(&*buf))
+            write!(f, "{}", String::from_utf8_lossy(&*buf).trim_matches(&['\0', '\n'][..]))
         }
     }
 }
