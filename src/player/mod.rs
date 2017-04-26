@@ -27,7 +27,7 @@ pub struct Player {
 
     pub queue: Vec<Arc<library::Audio>>,
     pub queue_autofill: Box<iter::Iterator<Item=library::Audio> + Send>,
-    queue_cursor: Option<usize>,
+    pub queue_cursor: Option<usize>,
 
     /// A weak reference to this player to be used in event handlers.
     weak_self: Weak<Mutex<Player>>,
