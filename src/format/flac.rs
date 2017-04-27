@@ -358,7 +358,7 @@ unsafe extern "C" fn metadata_cb<R>(_: *const FLAC__StreamDecoder, metadata: *co
                     "album" => ("TALB", Content::Text(value.to_string())),
                     "albumartist" => ("TPE2", Content::Text(value.to_string())),
                     "artist" => ("TPE1", Content::Text(value.to_string())),
-                    "date" => ("TDRL", Content::Text(value.to_string())),
+                    "date"|"retaildate" => ("TDRL", Content::Text(value.to_string())),
                     "disc"|"discnumber" => ("TPOS", Content::Text(value.to_string())),
                     "genre" => ("TCON", Content::Text(value.to_string())),
                     "software" => ("TSSE", Content::Text(value.to_string())),

@@ -119,22 +119,7 @@ impl str::FromStr for Release {
                         1 ... 31 => Some(d),
                         _ => None,
                     });
-
-                match (y, m, d) {
-                    (Some(y), Some(m), Some(d)) => Some(Release::Day{
-                        year: y,
-                        month: m,
-                        day: d,
-                    }),
-                    (Some(y), Some(m), _) => Some(Release::Month{
-                        year: y,
-                        month: m,
-                    }),
-                    (Some(y), _, _) => Some(Release::Year{
-                        year: y,
-                    }),
-                    _ => None,
-                }
+                y.map(|y| Release::new(y, m, d))
             })
             .map(|r| Ok(r))
             .unwrap_or(Err(ParseError::Unmatched))

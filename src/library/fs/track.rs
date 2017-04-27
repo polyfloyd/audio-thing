@@ -216,11 +216,16 @@ impl<P> library::TrackInfo for MetadataTrack<P>
 
     fn release(&self) -> Option<library::Release> {
         self.meta.tag.as_ref()
-            .and_then(|t| t.date_released())
-            .and_then(|time| {
-                time.year.map(|y| (y, time.month.map(|m| m as u32), time.day.map(|d| d as u32)))
+            .and_then(|t| {
+                t.get_all("TDRL")
+                    .into_iter()
+                    .filter_map(|frame| frame.content.text())
+                    .filter_map(|st| st.parse().ok())
+                    .fold(None, |acc: Option<library::Release>, b| match acc {
+                        None => Some(b),
+                        Some(acc) => Some(acc.most_precise(b)),
+                    })
             })
-            .map(|(y, m, d)| library::Release::new(y as u32, m, d))
     }
 }
 
