@@ -351,25 +351,54 @@ unsafe extern "C" fn metadata_cb<R>(_: *const FLAC__StreamDecoder, metadata: *co
                 .filter_map(|s| s.find('=').map(|i| (s, i)))
                 .filter(|&(ref s, ref i)| s[*i..].trim().len() > 0);
             for (s, i) in strings {
+                use id3::frame::Content;
                 let (key, value) = s.split_at(i);
                 let value = value[1..].trim();
-                let id3_id = match key.to_lowercase().replace(&[' ', '_'][..], "").as_str() {
-                    "album" => "TALB",
-                    "albumartist" => "TPE2",
-                    "artist" => "TPE1",
-                    "date" => "TDRL",
-                    "disc"|"discnumber" => "TPOS",
-                    "genre" => "TCON",
-                    "software" => "TSSE",
-                    "title" => "TIT2",
-                    "track"|"tracknumber" => "TRCK",
+                let (id, content) = match key.to_lowercase().replace(&[' ', '_'][..], "").as_str() {
+                    "album" => ("TALB", Content::Text(value.to_string())),
+                    "albumartist" => ("TPE2", Content::Text(value.to_string())),
+                    "artist" => ("TPE1", Content::Text(value.to_string())),
+                    "date" => ("TDRL", Content::Text(value.to_string())),
+                    "disc"|"discnumber" => ("TPOS", Content::Text(value.to_string())),
+                    "genre" => ("TCON", Content::Text(value.to_string())),
+                    "software" => ("TSSE", Content::Text(value.to_string())),
+                    "title" => ("TIT2", Content::Text(value.to_string())),
+                    "track"|"tracknumber" => ("TRCK", Content::Text(value.to_string())),
+                    "rating" => ("POPM", {
+                        let rs = value.parse()
+                            .ok()
+                            .and_then(|n| match n {
+                                0 => Some(0),
+                                1 => Some(1),
+                                2 => Some(64),
+                                3 => Some(128),
+                                4 => Some(196),
+                                5 => Some(255),
+                                _ => None,
+                            })
+                            .map(|n| {
+                                let mut a = "Windows Media Player 9 Series\0_\0\0\0\0"
+                                    .to_string()
+                                    .into_bytes();
+                                assert_eq!(a[30], '_' as u8);
+                                a[30] = n;
+                                Content::Unknown(a)
+                            });
+                        match rs {
+                            Some(c) => c,
+                            None => {
+                                warn!("invalid value for rating: {}", value);
+                                continue;
+                            },
+                        }
+                    }),
                     unk => {
-                        warn!("could not translate \"{}\" to id3", unk);
+                        warn!("could not translate \"{}\" with value \"{}\" to id3", unk, value);
                         continue;
                     },
                 };
-                let mut frame = id3::Frame::new(id3_id);
-                frame.content = id3::frame::Content::Text(value.to_string());
+                let mut frame = id3::Frame::new(id);
+                frame.content = content;
                 meta.tag.as_mut().unwrap().push(frame);
             }
         },
