@@ -137,9 +137,10 @@ impl<F, R> iter::Iterator for Decoder<F, R>
         if self.cb_data.current_block.is_none() {
             self.current_sample = 0;
             unsafe {
-                if FLAC__stream_decoder_process_single(self.decoder) != 1 {
-                    let state = FLAC__stream_decoder_get_state(self.decoder);
-                    if state != FLAC__STREAM_DECODER_END_OF_STREAM {
+                let error = FLAC__stream_decoder_process_single(self.decoder) != 1;
+                let state = FLAC__stream_decoder_get_state(self.decoder);
+                if state == FLAC__STREAM_DECODER_END_OF_STREAM || error {
+                    if error {
                         error!("{}", Error::BadState(state));
                     }
                     return None;
