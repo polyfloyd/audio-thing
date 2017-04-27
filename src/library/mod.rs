@@ -58,7 +58,7 @@ pub trait TrackInfo {
     fn album_disc(&self) -> Option<i32>;
     /// The position of this track in the album starting at 1 if known.
     fn album_track(&self) -> Option<i32>;
-    /// The rating in the range of 0 to 255 inclusive if known.
+    /// The rating (number of stars) ranging from 1 to 5 inclusive if known.
     fn rating(&self) -> Option<u8>;
     fn release(&self) -> Option<Release>;
 }

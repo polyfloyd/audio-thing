@@ -88,10 +88,16 @@ fn main() {
                 }
             },
             "info" => {
-                if let Some(&mut (_, ref mut pb)) = managed_id.as_ref().and_then(|id| p.playing.get_mut(id)) {
+                if let Some(&mut (ref audio, ref mut pb)) = managed_id.as_ref().and_then(|id| p.playing.get_mut(id)) {
                     let duration = pb.duration_time()
                         .map(|d| format_duraton(&d))
                         .unwrap_or("∞".to_string());
+                    if let &library::Audio::Track(ref t) = audio.as_ref() {
+                        println!("meta:");
+                        println!("  title:   {}", t.title());
+                        println!("  artists: {}", t.artists().get(0).unwrap_or(&"?".to_string()));
+                        println!("  rating:  {}", t.rating().map(|r| format!("{}", r)).unwrap_or("-".to_string()));
+                    }
                     println!("state:    {:?}", pb.state());
                     println!("position: {}/{}", format_duraton(&pb.position_time()), duration);
                     println!("tempo:    {}", pb.tempo());

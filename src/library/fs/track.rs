@@ -196,7 +196,22 @@ impl<P> library::TrackInfo for MetadataTrack<P>
     }
 
     fn rating(&self) -> Option<u8> {
-        None
+        self.meta.tag.as_ref()
+            .and_then(|t| t.get("POPM"))
+            .and_then(|frame| frame.content.unknown())
+            .and_then(|data| {
+                data.iter()
+                    .position(|b| *b == 0)
+                    .and_then(|i| data.get(i + 1))
+            })
+            .and_then(|num| match *num {
+                0 => None,
+                1...31 => Some(1),
+                32...95 => Some(2),
+                96...159 => Some(3),
+                160...223 => Some(4),
+                _ => Some(5),
+            })
     }
 
     fn release(&self) -> Option<library::Release> {
