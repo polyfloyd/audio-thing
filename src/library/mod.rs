@@ -1,6 +1,6 @@
 use std::*;
 use std::borrow::Cow;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use ::audio::*;
 
 pub mod fs;
@@ -21,6 +21,16 @@ pub enum Audio {
     Track(Box<Track>),
     Stream(Box<Stream>),
 }
+
+impl Audio {
+    pub fn track(&self) -> Option<&Track> {
+        match *self {
+            Audio::Track(ref track) => Some(track.as_ref()),
+            Audio::Stream(_) => None,
+        }
+    }
+}
+
 
 impl Identity for Audio {
     fn id(&self) -> (Cow<str>, Cow<str>) {
@@ -77,8 +87,8 @@ pub trait Track: TrackInfo + Identity {
 pub trait Stream: Identity {
     fn title(&self) -> Cow<str>;
     /// Opens the stream for listening. If information about the tracks being played is available,
-    /// it can be read from the returned iterator along with the time the track started playing.
-    fn open(&self) -> Result<(dyn::Source, Box<iter::Iterator<Item=(Box<TrackInfo>, time::Instant)>>), Box<error::Error>>;
+    /// it is applied to the specified callback.
+    fn open(&self, on_info: Arc<Fn(Option<Box<TrackInfo + Send>>)>) -> Result<dyn::Source, Box<error::Error>>;
 }
 
 

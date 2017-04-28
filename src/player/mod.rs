@@ -8,6 +8,7 @@ pub mod output;
 pub mod playback;
 pub use self::playback::*;
 
+
 /// A player manages the playback of audio from a list of audio. Multple tracks can be played at
 /// once to make mixing and crossfading possible.
 ///
@@ -18,8 +19,7 @@ pub use self::playback::*;
 pub struct Player {
     /// The tracks that are currently playing. When a track finishes or the playback is stopped
     /// manually, it will be removed from the map.
-    pub playing: BTreeMap<u64, (Arc<library::Audio>, Playback)>,
-
+    pub playing: BTreeMap<u64, (Arc<library::Audio>, Playback, Option<Box<library::TrackInfo + Send>>)>,
     /// Used for generating the next playback key.
     gen_next_id: u64,
 
@@ -50,12 +50,26 @@ impl Player {
 
     /// Sets up playback for the specified track. The initial state is set to paused.
     fn init_playback(&mut self, audio: Arc<library::Audio>) -> Result<(u64, &mut Playback), Error> {
-        let signal: dyn::Audio = match audio.as_ref() {
-            &library::Audio::Track(ref track) => track.audio()?.into(),
-            &library::Audio::Stream(_) => unimplemented!(),
-        };
         self.gen_next_id += 1;
         let id = self.gen_next_id;
+
+        let weak = self.weak_self.clone();
+        let signal: dyn::Audio = match audio.as_ref() {
+            &library::Audio::Track(ref track) => track.audio()?.into(),
+            &library::Audio::Stream(ref stream) => {
+                let on_info = Arc::new(move |info| {
+                    let arc = match weak.upgrade() { Some(arc) => arc, None => return };
+                    thread::spawn(move || {
+                        let mut player = arc.lock().unwrap();
+                        if let Some(&mut (_, _, ref mut i)) = player.playing.get_mut(&id) {
+                            *i = info;
+                        }
+                    });
+                });
+                stream.open(on_info)?.into()
+            },
+        };
+
         let weak = self.weak_self.clone();
         let playback = Playback::new(signal, &*self.output, Arc::new(move |event| {
             let arc = match weak.upgrade() { Some(arc) => arc, None => return };
@@ -84,7 +98,7 @@ impl Player {
                 }
             });
         }));
-        self.playing.insert(id, (audio.clone(), playback));
+        self.playing.insert(id, (audio.clone(), playback, None));
         Ok((id, &mut self.playing.get_mut(&id).unwrap().1))
     }
 

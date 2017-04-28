@@ -66,38 +66,45 @@ fn main() {
                     p.queue.push(sync::Arc::new(library::Audio::Track(track)));
                     managed_id.as_ref()
                         .and_then(|id| p.playing.get_mut(id))
-                        .map(|&mut (_, ref mut pb)| pb.set_state(player::State::Stopped));
+                        .map(|&mut (_, ref mut pb, _)| pb.set_state(player::State::Stopped));
                     let (id, _) = p.play_next_from_queue().unwrap().unwrap();
                     managed_id = Some(id);
                 }
             },
 
             "pause" => {
-                if let Some(&mut (_, ref mut pb)) = managed_id.as_ref().and_then(|id| p.playing.get_mut(id)) {
+                if let Some(&mut (_, ref mut pb, _)) = managed_id.as_ref().and_then(|id| p.playing.get_mut(id)) {
                     pb.set_state(player::State::Paused);
                 }
             },
             "play" => {
-                if let Some(&mut (_, ref mut pb)) = managed_id.as_ref().and_then(|id| p.playing.get_mut(id)) {
+                if let Some(&mut (_, ref mut pb, _)) = managed_id.as_ref().and_then(|id| p.playing.get_mut(id)) {
                     pb.set_state(player::State::Playing);
                 }
             },
             "stop" => {
-                if let Some(&mut (_, ref mut pb)) = managed_id.as_ref().and_then(|id| p.playing.get_mut(id)) {
+                if let Some(&mut (_, ref mut pb, _)) = managed_id.as_ref().and_then(|id| p.playing.get_mut(id)) {
                     pb.set_state(player::State::Stopped);
                 }
             },
             "info" => {
-                if let Some(&mut (ref audio, ref mut pb)) = managed_id.as_ref().and_then(|id| p.playing.get_mut(id)) {
+                fn print_info<T: library::TrackInfo + ?Sized>(info: &T) {
+                    println!("meta:");
+                    println!("  title:   {}", info.title());
+                    println!("  artists: {}", info.artists()
+                             .get(0)
+                             .unwrap_or(&"?".to_string()));
+                    println!("  rating:  {}", info.rating()
+                             .map(|r| format!("{}", r))
+                             .unwrap_or("-".to_string()));
+                }
+                if let Some(&mut (ref audio, ref mut pb, ref info)) = managed_id.as_ref().and_then(|id| p.playing.get_mut(id)) {
                     let duration = pb.duration_time()
                         .map(|d| format_duraton(&d))
                         .unwrap_or("∞".to_string());
-                    if let &library::Audio::Track(ref t) = audio.as_ref() {
-                        println!("meta:");
-                        println!("  title:   {}", t.title());
-                        println!("  artists: {}", t.artists().get(0).unwrap_or(&"?".to_string()));
-                        println!("  rating:  {}", t.rating().map(|r| format!("{}", r)).unwrap_or("-".to_string()));
-                    }
+                    info.as_ref()
+                        .map(|i| print_info(i.as_ref()))
+                        .or_else(|| audio.track().map(print_info));
                     println!("state:    {:?}", pb.state());
                     println!("position: {}/{}", format_duraton(&pb.position_time()), duration);
                     println!("tempo:    {}", pb.tempo());
@@ -114,7 +121,7 @@ fn main() {
                     }
                     match audio.as_ref() {
                         &library::Audio::Track(ref track) => {
-                            println!(" {} - {}", track.artists().get(0).unwrap_or(&"?".to_string()), track.title());
+                            println!("{} - {}", track.artists().get(0).unwrap_or(&"?".to_string()), track.title());
                         },
                         &library::Audio::Stream(_) => unimplemented!(),
                     };
@@ -122,14 +129,14 @@ fn main() {
             },
 
             l if l.starts_with(":") => {
-                if let Some(&mut (_, ref mut pb)) = managed_id.as_ref().and_then(|id| p.playing.get_mut(id)) {
+                if let Some(&mut (_, ref mut pb, _)) = managed_id.as_ref().and_then(|id| p.playing.get_mut(id)) {
                     if let Ok(t) = l[1..].parse() {
                         pb.set_position_time(time::Duration::new(t, 0));
                     }
                 }
             },
             l if l.starts_with("t") => {
-                if let Some(&mut (_, ref mut pb)) = managed_id.as_ref().and_then(|id| p.playing.get_mut(id)) {
+                if let Some(&mut (_, ref mut pb, _)) = managed_id.as_ref().and_then(|id| p.playing.get_mut(id)) {
                     if let Ok(r) = l[1..].parse() {
                         pb.set_tempo(r);
                     }
