@@ -67,9 +67,20 @@ fn main() {
                     managed_id.as_ref()
                         .and_then(|id| p.playing.get_mut(id))
                         .map(|&mut (_, ref mut pb, _)| pb.set_state(player::State::Stopped));
-                    let (id, _) = p.play_next_from_queue().unwrap().unwrap();
+                    let i = p.queue.len() - 1;
+                    let (id, _) = p.play_from_queue(i).unwrap().unwrap();
                     managed_id = Some(id);
                 }
+            },
+            "prev" => {
+                managed_id = p.play_previous_from_queue()
+                    .unwrap()
+                    .map(|t| t.0);
+            },
+            "next" => {
+                managed_id = p.play_next_from_queue()
+                    .unwrap()
+                    .map(|t| t.0);
             },
 
             "pause" => {
@@ -128,6 +139,13 @@ fn main() {
                 }
             },
 
+            l if l.starts_with("j") => {
+                if let Ok(i) = l[1..].parse() {
+                    managed_id = p.play_from_queue(i)
+                        .unwrap()
+                        .map(|t| t.0);
+                }
+            },
             l if l.starts_with(":") => {
                 if let Some(&mut (_, ref mut pb, _)) = managed_id.as_ref().and_then(|id| p.playing.get_mut(id)) {
                     if let Ok(t) = l[1..].parse() {

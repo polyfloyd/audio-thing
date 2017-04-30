@@ -102,6 +102,25 @@ impl Player {
         Ok((id, &mut self.playing.get_mut(&id).unwrap().1))
     }
 
+    pub fn play_from_queue(&mut self, index: usize) -> Result<Option<(u64, &mut Playback)>, Error> {
+        let audio = match self.queue.get(index) {
+            Some(audio) => audio.clone(),
+            None => return Ok(None),
+        };
+        self.playing.clear();
+        self.queue_cursor = Some(index);
+        let (id, mut pb) = self.init_playback(audio)?;
+        pb.set_state(State::Playing);
+        Ok(Some((id, pb)))
+    }
+
+    pub fn play_previous_from_queue(&mut self) -> Result<Option<(u64, &mut Playback)>, Error> {
+        let index = self.queue_cursor
+            .and_then(|i| i.checked_sub(1))
+            .unwrap_or(0);
+        self.play_from_queue(index)
+    }
+
     /// Stops all currently playing tracks, advances the queue cursor and starts playing the track
     /// at that position.
     ///
@@ -114,15 +133,7 @@ impl Player {
         if index >= self.queue.len() {
             self.queue.extend(self.queue_autofill.next().map(Arc::new).into_iter());
         }
-        let audio = match self.queue.get(index) {
-            Some(audio) => audio.clone(),
-            None => return Ok(None),
-        };
-        self.playing.clear();
-        self.queue_cursor = Some(index);
-        let (id, mut pb) = self.init_playback(audio)?;
-        pb.set_state(State::Playing);
-        Ok(Some((id, pb)))
+        self.play_from_queue(index)
     }
 }
 
