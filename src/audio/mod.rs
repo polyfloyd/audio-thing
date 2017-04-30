@@ -67,6 +67,12 @@ impl error::Error for SeekError {
     }
 }
 
+impl From<Box<error::Error>> for SeekError {
+    fn from(err: Box<error::Error>) -> SeekError {
+        SeekError::Other(err)
+    }
+}
+
 
 pub fn duration_of(sample_rate: u32, num_samples: u64) -> time::Duration {
     let secs = num_samples / sample_rate as u64;

@@ -157,10 +157,6 @@ impl<F, R> iter::Iterator for Decoder<F, R>
                             return None;
                         }
                         let frame = &self.index.frames[self.next_frame];
-                        if let Err(err) = self.input.seek(io::SeekFrom::Start(frame.offset)) {
-                            error!("{}", err);
-                            return None;
-                        }
                         num_read = match self.input.read(&mut self.input_buf[..frame.length as usize]) {
                             Ok(nr) if nr == 0 => return None,
                             Ok(nr) => nr,
@@ -208,6 +204,9 @@ impl<F, R> Seekable for Decoder<F, R>
         self.samples_available = 0;
         assert!(self.next_frame < self.index.frames.len());
         assert!(self.next_sample < MAX_FRAME_SIZE);
+        let frame = &self.index.frames[self.next_frame];
+        self.input.seek(io::SeekFrom::Start(frame.offset))
+            .map_err(Box::from)?;
         Ok(())
     }
 
