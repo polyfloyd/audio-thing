@@ -26,7 +26,7 @@ mod player;
 mod pulse;
 
 fn main() {
-    if cfg!(release) {
+    if cfg!(release) || env::var("LOG").is_ok() {
         badlog::init_from_env("LOG");
     } else {
         badlog::init(Some("debug"));
