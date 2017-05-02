@@ -139,7 +139,7 @@ impl<F, R> iter::Iterator for Decoder<F, R>
             unsafe {
                 let error = FLAC__stream_decoder_process_single(self.decoder) != 1;
                 let state = FLAC__stream_decoder_get_state(self.decoder);
-                if state == FLAC__STREAM_DECODER_END_OF_STREAM || error {
+                if state == FLAC__StreamDecoderState::FLAC__STREAM_DECODER_END_OF_STREAM || error {
                     if error {
                         error!("{}", Error::BadState(state));
                     }
@@ -256,7 +256,7 @@ struct Block {
 
 
 unsafe extern "C" fn error_cb(_: *const FLAC__StreamDecoder, status: FLAC__StreamDecoderErrorStatus, _: *mut os::raw::c_void) {
-    error!("FLAC error callback called: {:?}", status);
+    error!("error: {:?}", status);
 }
 
 unsafe extern "C" fn write_cb<R>(_: *const FLAC__StreamDecoder, frame: *const FLAC__Frame, buffer: *const *const FLAC__int32, client_data: *mut os::raw::c_void) -> FLAC__StreamDecoderWriteStatus
@@ -342,6 +342,7 @@ unsafe extern "C" fn metadata_cb<R>(_: *const FLAC__StreamDecoder, metadata: *co
         },
     };
 
+    use libflac_sys::FLAC__MetadataType::*;
     match (*metadata).type_ {
         FLAC__METADATA_TYPE_VORBIS_COMMENT => {
             let comment = (*metadata).data.vorbis_comment.as_ref();
@@ -415,6 +416,7 @@ unsafe extern "C" fn metadata_cb<R>(_: *const FLAC__StreamDecoder, metadata: *co
                 .to_string_lossy()
                 .to_string();
             use id3::frame::PictureType;
+            use libflac_sys::FLAC__StreamMetadata_Picture_Type::*;
             let typ = match picture.type_ {
                 FLAC__STREAM_METADATA_PICTURE_TYPE_FILE_ICON_STANDARD => PictureType::Icon,
                 FLAC__STREAM_METADATA_PICTURE_TYPE_FILE_ICON => PictureType::OtherIcon,
@@ -514,12 +516,12 @@ impl fmt::Display for Error {
                 write!(f, "Failed to construct decoder")
             },
             Error::InitFailed(status) => unsafe {
-                let s = FLAC__StreamDecoderInitStatusString.offset(status as isize);
+                let s = FLAC__StreamDecoderInitStatusString.as_ptr().offset(status as isize);
                 let errstr = ffi::CStr::from_ptr(*s);
                 write!(f, "Flac init failed: {}", errstr.to_str().unwrap())
             },
             Error::BadState(state) => unsafe {
-                let s = FLAC__StreamDecoderStateString.offset(state as isize);
+                let s = FLAC__StreamDecoderStateString.as_ptr().offset(state as isize);
                 let errstr = ffi::CStr::from_ptr(*s);
                 write!(f, "Flac bad state: {}", errstr.to_str().unwrap())
             },
