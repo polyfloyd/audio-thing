@@ -1,5 +1,6 @@
 use std::*;
 use std::borrow::Cow;
+use std::hash::{Hash, Hasher};
 use std::sync::mpsc;
 use notify::{self, Watcher};
 use rusqlite as sqlite;
@@ -25,26 +26,29 @@ impl Filesystem {
         let db_path = xdg::BaseDirectories::with_prefix(env!("CARGO_PKG_NAME"))?
             .place_cache_file("filesystem_TODO.db")?;
         let db = sqlite::Connection::open(&db_path)?;
+        let database_schema = include_str!("database.sql");
 
-        let current_version = env!("CARGO_PKG_VERSION_MAJOR").parse::<u32>().unwrap() * 1_00_00
-            + env!("CARGO_PKG_VERSION_MINOR").parse::<u32>().unwrap() * 1_00
-            + env!("CARGO_PKG_VERSION_PATCH").parse::<u32>().unwrap();
+        let wanted_version = {
+            let mut s = collections::hash_map::DefaultHasher::new();
+            database_schema.hash(&mut s);
+            (s.finish() % u32::MAX as u64) as i64
+        };
         let db_version = db.prepare("PRAGMA user_version")?
-            .query_row(&[], |row| row.get::<_, u32>(0))?;
+            .query_row(&[], |row| row.get::<_, i64>(0))?;
 
-        debug!("filesystem db schema version: {}, current: {}", db_version, current_version);
-        let mut db = if cfg!(not(release)) || db_version != current_version {
+        debug!("db schema versions: current={}, wanted={}", db_version, wanted_version);
+        let mut db = if db_version != wanted_version {
             drop(db);
             debug!("(re)initializing filesystem db");
             fs::remove_file(&db_path)?;
             let db = sqlite::Connection::open(&db_path)?;
-            db.execute_batch(include_str!("database.sql"))?;
+            db.execute_batch(database_schema)?;
             // Eh, pragma statements don't seem to handle parameters very well. Let's use the
             // idiot way for now.
-            db.execute(&format!("PRAGMA user_version = {}", current_version), &[])?;
+            db.execute(&format!("PRAGMA user_version = {}", wanted_version), &[])?;
             db
         } else {
-            debug!("filesystem db schema up to date");
+            debug!("db schema up to date");
             db
         };
         init_db_functions(&mut db)?;
