@@ -73,7 +73,7 @@ impl Filesystem {
                     None => return,
                 };
                 let mut db = arc.lock().unwrap();
-                if let Err(err) = track_add_recursive(&mut db, &root) {
+                if let Err(err) = add_to_index(&mut db, &root) {
                     error!("error building index: {}", err);
                 }
                 if let Err(err) = track_clean_recursive(&mut db, path::Path::new("")) {
@@ -107,7 +107,7 @@ impl Filesystem {
                             path.canonicalize()
                                 .map_err(|err| err.into())
                                 .and_then(|path| {
-                                    track_add_recursive(db, &path)
+                                    add_to_index(db, &path)
                                 })
                         });
                     },
@@ -116,7 +116,7 @@ impl Filesystem {
                             path.canonicalize()
                                 .map_err(|err| err.into())
                                 .and_then(|path| {
-                                    track_add_recursive(db, &path)
+                                    add_to_index(db, &path)
                                 })
                         });
                     },
@@ -125,7 +125,7 @@ impl Filesystem {
                             path.canonicalize()
                                 .map_err(|err| err.into())
                                 .and_then(|path| {
-                                    track_add_recursive(db, &path)?;
+                                    add_to_index(db, &path)?;
                                     track_clean_recursive(db, &path)
                                 })
                         });
@@ -146,7 +146,7 @@ impl Filesystem {
                                 .and_then(|path| track_clean_recursive(db, &path))?;
                             dest.canonicalize()
                                 .map_err(|err| err.into())
-                                .and_then(|path| track_add_recursive(db, &path))
+                                .and_then(|path| add_to_index(db, &path))
                         });
                     },
                     notify::DebouncedEvent::NoticeWrite(_) => (),
@@ -242,37 +242,48 @@ pub fn track_from_path(path: &path::Path) -> Result<Box<Track>, Error> {
 }
 
 
-/// Attempts to recursively add or update a file to the index.
-fn track_add_recursive(db: &mut sqlite::Connection, path: &path::Path) -> Result<(), Error> {
-    if fs::metadata(path)?.is_dir() {
+/// Attempts to recursively add or update a file or directory to the index.
+fn add_to_index(db: &mut sqlite::Connection, path: &path::Path) -> Result<(), Error> {
+    fn dir_add_recursive(db: &mut sqlite::Connection, path: &path::Path) -> Result<(), Error> {
+        debug_assert!(fs::metadata(path)?.is_dir());
         for entry in fs::read_dir(path)? {
             let entry = entry?;
-            track_add_recursive(db, &*entry.path())?;
+            if entry.file_type()?.is_dir() {
+                dir_add_recursive(db, &*entry.path())?;
+            } else {
+                track_add(db, &*entry.path())?;
+            }
         }
         return Ok(());
     }
-
-    let rs = format::decode_file(path);
-    if let Err(format::Error::Unsupported) = rs {
-        // Not an audio file.
-        debug!("skipping (unsupported): {}", path.to_string_lossy());
-        return Ok(());
+    fn track_add(db: &mut sqlite::Connection, path: &path::Path) -> Result<(), Error> {
+        debug_assert!(!fs::metadata(path)?.is_dir());
+        let rs = format::decode_file(path);
+        if let Err(format::Error::Unsupported) = rs {
+            // Not an audio file.
+            debug!("skipping (unsupported): {}", path.to_string_lossy());
+            return Ok(());
+        }
+        let (_, metadata) = rs?;
+        if metadata.num_samples.is_none() {
+            // A stream or a track without a known length.
+            debug!("skipping (unknown length): {}", path.to_string_lossy());
+            return Ok(());
+        }
+        let track = MetadataTrack {
+            path: path,
+            meta: metadata,
+        };
+        track_upsert(db, &track)?;
+        debug!("indexed {}", path.to_string_lossy());
+        Ok(())
     }
-    let (_, metadata) = rs?;
-    if metadata.num_samples.is_none() {
-        // A stream or a track without a known length.
-        debug!("skipping (unknown length): {}", path.to_string_lossy());
-        return Ok(());
+
+    if fs::metadata(path)?.is_dir() {
+        dir_add_recursive(db, path)
+    } else {
+        track_add(db, path)
     }
-
-    let track = MetadataTrack {
-        path: path,
-        meta: metadata,
-    };
-    track_upsert(db, &track)?;
-
-    debug!("indexed {}", path.to_string_lossy());
-    Ok(())
 }
 
 fn track_upsert<P>(db: &mut sqlite::Connection, track: &MetadataTrack<P>) -> Result<(), Error>
