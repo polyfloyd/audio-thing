@@ -15,7 +15,7 @@ extern crate libflac_sys;
 extern crate liblame_sys;
 extern crate libpulse_sys;
 use std::*;
-use std::io::BufRead;
+use std::io::{BufRead, Write};
 use ::library::Library;
 
 mod audio;
@@ -46,6 +46,7 @@ fn main() {
             id
         });
 
+    let mut out = io::stderr();
     let stdin = io::stdin();
     let mut lines = stdin.lock().lines();
     while let Some(Ok(line)) = lines.next() {
@@ -55,7 +56,7 @@ fn main() {
                 let tracks: Vec<_> = fs.tracks().unwrap()
                     .collect();
                 for (i, track) in tracks.iter().enumerate() {
-                    println!("{}: {} - {}", i, track.artists().get(0).unwrap_or(&"?".to_string()), track.title());
+                    write!(out, "{}: {} - {}", i, track.artists().get(0).unwrap_or(&"?".to_string()), track.title()).unwrap();
                 }
                 let track = lines.next().unwrap()
                     .unwrap_or("q".to_string())
@@ -100,14 +101,15 @@ fn main() {
             },
             "info" => {
                 fn print_info<T: library::TrackInfo + ?Sized>(info: &T) {
-                    println!("meta:");
-                    println!("  title:   {}", info.title());
-                    println!("  artists: {}", info.artists()
+                    let mut out = io::stderr();
+                    writeln!(out, "meta:").unwrap();
+                    writeln!(out, "  title:   {}", info.title()).unwrap();
+                    writeln!(out, "  artists: {}", info.artists()
                              .get(0)
-                             .unwrap_or(&"?".to_string()));
-                    println!("  rating:  {}", info.rating()
+                             .unwrap_or(&"?".to_string())).unwrap();
+                    writeln!(out, "  rating:  {}", info.rating()
                              .map(|r| format!("{}", r))
-                             .unwrap_or("-".to_string()));
+                             .unwrap_or("-".to_string())).unwrap();
                 }
                 if let Some(&mut (ref audio, ref mut pb, ref info)) = managed_id.as_ref().and_then(|id| p.playing.get_mut(id)) {
                     let duration = pb.duration_time()
@@ -116,23 +118,23 @@ fn main() {
                     info.as_ref()
                         .map(|i| print_info(i.as_ref()))
                         .or_else(|| audio.track().map(print_info));
-                    println!("state:    {:?}", pb.state());
-                    println!("position: {}/{}", format_duraton(&pb.position_time()), duration);
-                    println!("tempo:    {}", pb.tempo());
-                    println!("latency:  {}ns", pb.stream.latency().unwrap().subsec_nanos());
+                    writeln!(out, "state:    {:?}", pb.state()).unwrap();
+                    writeln!(out, "position: {}/{}", format_duraton(&pb.position_time()), duration).unwrap();
+                    writeln!(out, "tempo:    {}", pb.tempo()).unwrap();
+                    writeln!(out, "latency:  {}ns", pb.stream.latency().unwrap().subsec_nanos()).unwrap();
                 }
             },
 
             "queue" => {
                 for (i, audio) in p.queue.iter().enumerate() {
                     if p.queue_cursor == Some(i) {
-                        print!("-> ");
+                        write!(out, "-> ").unwrap();
                     } else {
-                        print!("   ");
+                        write!(out, "   ").unwrap();
                     }
                     match audio.as_ref() {
                         &library::Audio::Track(ref track) => {
-                            println!("{} - {}", track.artists().get(0).unwrap_or(&"?".to_string()), track.title());
+                            writeln!(out, "{} - {}", track.artists().get(0).unwrap_or(&"?".to_string()), track.title()).unwrap();
                         },
                         &library::Audio::Stream(_) => unimplemented!(),
                     };
@@ -160,7 +162,7 @@ fn main() {
                     }
                 }
             },
-            ukn => println!("wtf: {}", ukn),
+            ukn => writeln!(out, "wtf: {}", ukn).unwrap(),
         }
     }
 }
