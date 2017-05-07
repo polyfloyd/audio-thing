@@ -146,29 +146,10 @@ impl FromSql for Release {
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum ParseError {
+    /// The input text was not matched.
     Unmatched,
-}
-
-impl fmt::Display for ParseError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            ParseError::Unmatched =>  {
-                write!(f, "Input text is was not matched")
-            },
-        }
-    }
-}
-
-impl error::Error for ParseError {
-    fn description(&self) -> &str {
-        "Release parse error"
-    }
-
-    fn cause(&self) -> Option<&error::Error> {
-        None
-    }
 }
 
 

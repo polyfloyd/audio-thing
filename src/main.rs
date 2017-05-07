@@ -1,5 +1,7 @@
 extern crate badlog;
 extern crate byteorder;
+#[macro_use]
+extern crate derive_error;
 extern crate dft;
 extern crate id3;
 #[macro_use]

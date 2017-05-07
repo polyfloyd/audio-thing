@@ -7,6 +7,7 @@ publish = false
 [dependencies]
 badlog = "^0.2.5"
 byteorder = "^1.0.0"
+derive-error = "^0.0.3"
 dft = "^0.5.4"
 id3 = { version = "*", git = "https://github.com/polyfloyd/rust-id3" }
 lazy_static = "^0.2.8"
