@@ -162,7 +162,7 @@ impl Filesystem {
     }
 
     /// TODO: This function will be removed in the future when the search API is finished.
-    pub fn track_by_path(&self, path: &path::Path) -> Result<Option<Box<Track>>, Box<error::Error>> {
+    pub fn track_by_path(&self, path: &path::Path) -> Result<Option<sync::Arc<Track>>, Box<error::Error>> {
         let path = if path.is_absolute() {
             path.canonicalize()?
         } else {
@@ -181,7 +181,7 @@ impl library::Library for Filesystem {
         Cow::Borrowed("fs")
     }
 
-    fn tracks(&self) -> Result<Box<iter::Iterator<Item=Box<library::Track>>>, Box<error::Error>> {
+    fn tracks(&self) -> Result<Box<iter::Iterator<Item=sync::Arc<library::Track>>>, Box<error::Error>> {
         let db = self.db.lock().unwrap();
         let mut stmt_tracks = db.prepare(r#"
            SELECT * FROM "track"
@@ -228,14 +228,14 @@ impl library::Library for Filesystem {
                 Ok(track)
             })?
             .collect(); // TODO: Stream results instead of collecting.
-        Ok(Box::from(tracks?.into_iter().map(|t| Box::<library::Track>::from(Box::from(t)))))
+        Ok(Box::from(tracks?.into_iter().map(|t| sync::Arc::<library::Track>::from(sync::Arc::from(t)))))
     }
 }
 
 /// Creates an ad-hoc track from a path.
-pub fn track_from_path(path: &path::Path) -> Result<Box<Track>, Error> {
+pub fn track_from_path(path: &path::Path) -> Result<sync::Arc<Track>, Error> {
     let (_, metadata) = format::decode_file(path)?;
-    Ok(Box::new(MetadataTrack {
+    Ok(sync::Arc::new(MetadataTrack {
         path: path.to_path_buf(),
         meta: metadata,
     }))

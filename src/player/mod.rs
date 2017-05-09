@@ -19,13 +19,13 @@ pub use self::playback::*;
 pub struct Player {
     /// The tracks that are currently playing. When a track finishes or the playback is stopped
     /// manually, it will be removed from the map.
-    pub playing: BTreeMap<u64, (Arc<library::Audio>, Playback, Option<Box<library::TrackInfo + Send>>)>,
+    pub playing: BTreeMap<u64, (library::Audio, Playback, Option<Box<library::TrackInfo + Send>>)>,
     /// Used for generating the next playback key.
     gen_next_id: u64,
 
     output: Box<output::Output + Send>,
 
-    pub queue: Vec<Arc<library::Audio>>,
+    pub queue: Vec<library::Audio>,
     pub queue_autofill: Box<iter::Iterator<Item=library::Audio> + Send>,
     pub queue_cursor: Option<usize>,
 
@@ -49,14 +49,14 @@ impl Player {
     }
 
     /// Sets up playback for the specified track. The initial state is set to paused.
-    fn init_playback(&mut self, audio: Arc<library::Audio>) -> Result<(u64, &mut Playback), Error> {
+    fn init_playback(&mut self, audio: library::Audio) -> Result<(u64, &mut Playback), Error> {
         self.gen_next_id += 1;
         let id = self.gen_next_id;
 
         let weak = self.weak_self.clone();
-        let signal: dyn::Audio = match audio.as_ref() {
-            &library::Audio::Track(ref track) => track.audio()?.into(),
-            &library::Audio::Stream(ref stream) => {
+        let signal: dyn::Audio = match audio {
+            library::Audio::Track(ref track) => track.audio()?.into(),
+            library::Audio::Stream(ref stream) => {
                 let on_info = Arc::new(move |info| {
                     let arc = match weak.upgrade() { Some(arc) => arc, None => return };
                     thread::spawn(move || {
@@ -131,7 +131,7 @@ impl Player {
             .map(|i| i + 1)
             .unwrap_or(0);
         if index >= self.queue.len() {
-            self.queue.extend(self.queue_autofill.next().map(Arc::new).into_iter());
+            self.queue.extend(self.queue_autofill.next().into_iter());
         }
         self.play_from_queue(index)
     }

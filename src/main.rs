@@ -43,7 +43,7 @@ fn main() {
             let mut p = player.lock().unwrap();
             let path = path::PathBuf::from(filename);
             let track = library::fs::track_from_path(&path).unwrap();
-            p.queue.push(sync::Arc::new(library::Audio::Track(track)));
+            p.queue.push(library::Audio::Track(track));
             let (id, _) = p.play_next_from_queue().unwrap().unwrap();
             id
         });
@@ -66,7 +66,7 @@ fn main() {
                     .ok()
                     .and_then(|index| tracks.into_iter().nth(index));
                 if let Some(track) = track {
-                    p.queue.push(sync::Arc::new(library::Audio::Track(track)));
+                    p.queue.push(library::Audio::Track(track));
                     managed_id.as_ref()
                         .and_then(|id| p.playing.get_mut(id))
                         .map(|&mut (_, ref mut pb, _)| pb.set_state(player::State::Stopped));
@@ -134,11 +134,11 @@ fn main() {
                     } else {
                         write!(out, "   ").unwrap();
                     }
-                    match audio.as_ref() {
-                        &library::Audio::Track(ref track) => {
+                    match *audio {
+                        library::Audio::Track(ref track) => {
                             writeln!(out, "{} - {}", track.artists().get(0).unwrap_or(&"?".to_string()), track.title()).unwrap();
                         },
-                        &library::Audio::Stream(_) => unimplemented!(),
+                        library::Audio::Stream(_) => unimplemented!(),
                     };
                 }
             },

@@ -13,13 +13,14 @@ pub trait Library {
     fn name(&self) -> Cow<str>;
 
     // TODO: search
-    fn tracks(&self) -> Result<Box<iter::Iterator<Item=Box<Track>>>, Box<error::Error>>;
+    fn tracks(&self) -> Result<Box<iter::Iterator<Item=Arc<Track>>>, Box<error::Error>>;
 }
 
 
+#[derive(Clone)]
 pub enum Audio {
-    Track(Box<Track>),
-    Stream(Box<Stream>),
+    Track(Arc<Track>),
+    Stream(Arc<Stream>),
 }
 
 impl Audio {
@@ -95,8 +96,8 @@ pub trait Stream: Identity {
 pub trait Playlist: Identity {
     /// Gets the number of tracks in the playlist without loading its complete contents.
     fn len(&self) -> Result<usize, Box<error::Error>>;
-    /// TODO: Cow<[Audio]>?
-    fn contents(&self) -> Result<Vec<Audio>, Box<error::Error>>;
+    /// Returns the contents of the playlist
+    fn contents(&self) -> Result<Cow<[Audio]>, Box<error::Error>>;
 
     /// It is possible that a playlist can not be modified, e.g. a read-only HTTP API. Because this
     /// is often known in advance, the playlist should be upgraded into a mutable playlist with
@@ -106,11 +107,11 @@ pub trait Playlist: Identity {
 
 pub trait PlaylistMut: Playlist {
     /// Replaces the entire playlist with another.
-    fn set_contents(&mut self, &[&Identity]) -> Result<(), Box<error::Error>>;
+    fn set_contents(&mut self, new: &[&Identity]) -> Result<(), Box<error::Error>>;
 
     /// Inserts the given audio into the specified position.
     fn insert(&mut self, position: usize, audio: &[&Identity]) -> Result<(), Box<error::Error>> {
-        let orig = self.contents()?;
+        let orig = self.contents()?.to_vec();
         let contents: Vec<&Identity> = orig[..position].iter().map(|r| -> &Identity { r })
             .chain(audio.into_iter().map(|r| -> &Identity { r }))
             .chain(orig[position..].iter().map(|r| -> &Identity { r }))
@@ -121,7 +122,7 @@ pub trait PlaylistMut: Playlist {
 
     /// Removes the specified range from the playlist.
     fn remove(&mut self, range: ops::Range<usize>) -> Result<(), Box<error::Error>> {
-        let orig = self.contents()?;
+        let orig = self.contents()?.to_vec();
         let contents: Vec<&Identity> = orig.iter().take(range.start)
             .chain(orig.iter().skip(range.end))
             .map(|r| -> &Identity { r })
@@ -136,7 +137,7 @@ pub trait PlaylistMut: Playlist {
     ///
     /// If `to` is inside the range to be moved, this is a no-op.
     fn splice(&mut self, from: ops::Range<usize>, to: usize) -> Result<(), Box<error::Error>> {
-        let orig = self.contents()?;
+        let orig = self.contents()?.to_vec();
         let contents: Vec<&Identity> =
             if to < from.start {
                 orig[0..from.start].iter()
@@ -163,7 +164,7 @@ pub trait PlaylistMut: Playlist {
     ///
     /// The index list should have the same size as this playlist.
     fn move_all(&mut self, from: &[usize]) -> Result<(), Box<error::Error>> {
-        let orig = self.contents()?;
+        let orig = self.contents()?.to_vec();
         if from.len() != orig.len() {
             unimplemented!();
         }

@@ -44,11 +44,11 @@ impl library::Playlist for Playlist {
         Ok(count)
     }
 
-    fn contents(&self) -> Result<Vec<library::Audio>, Box<error::Error>> {
+    fn contents(&self) -> Result<Cow<[library::Audio]>, Box<error::Error>> {
         let fs = self.fs.upgrade()
             .ok_or_else(|| Error::Unspecified)?;
         let contents = read_m3u(&*fs.lock().unwrap(), path::Path::new(&self.file))?;
-        Ok(contents)
+        Ok(Cow::Owned(contents))
     }
 
     fn as_mut(&mut self) -> Option<&mut library::PlaylistMut> {
