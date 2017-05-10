@@ -1,4 +1,5 @@
 use std::*;
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, Weak};
 use ::audio::*;
@@ -29,12 +30,14 @@ pub struct Player {
     pub queue_autofill: Box<iter::Iterator<Item=library::Audio> + Send>,
     pub queue_cursor: Option<usize>,
 
+    pub libraries: Vec<Arc<library::Library>>,
+
     /// A weak reference to this player to be used in event handlers.
     weak_self: Weak<Mutex<Player>>,
 }
 
 impl Player {
-    pub fn new(output: Box<output::Output + Send>) -> Arc<Mutex<Player>> {
+    pub fn new(output: Box<output::Output + Send>, libs: Vec<Arc<library::Library>>) -> Arc<Mutex<Player>> {
         let p = Arc::new(Mutex::new(Player {
             playing: BTreeMap::new(),
             gen_next_id: 0,
@@ -42,6 +45,7 @@ impl Player {
             queue: Vec::new(),
             queue_cursor: None,
             queue_autofill: Box::from(iter::empty()),
+            libraries: libs,
             weak_self: Weak::new(),
         }));
         p.lock().unwrap().weak_self = Arc::downgrade(&p);
@@ -134,6 +138,83 @@ impl Player {
             self.queue.extend(self.queue_autofill.next().into_iter());
         }
         self.play_from_queue(index)
+    }
+}
+
+impl library::Playlist for Player {
+    fn len(&self) -> Result<usize, Box<error::Error>> {
+        Ok(self.queue.len())
+    }
+
+    fn contents(&self) -> Result<Cow<[library::Audio]>, Box<error::Error>> {
+        Ok(Cow::Borrowed(&self.queue[..]))
+    }
+
+    fn as_mut(&mut self) -> Option<&mut library::PlaylistMut> {
+        Some(self)
+    }
+}
+
+impl library::PlaylistMut for Player {
+    fn set_contents(&mut self, new: &[&library::Identity]) -> Result<(), Box<error::Error>> {
+        self.queue = library::resolve_all(&self.libraries[..], new)?;
+        self.queue_cursor = None;
+        Ok(())
+    }
+
+    fn insert(&mut self, position: usize, audio: &[&library::Identity]) -> Result<(), Box<error::Error>> {
+        if position > self.queue.len() {
+            return Err(Box::from(library::PlaylistError::IndexOutOfBounds));
+        }
+        let resolved = library::resolve_all(&self.libraries[..], audio)?;
+        if let Some(mut cur) = self.queue_cursor.as_mut() {
+            if position < *cur {
+                *cur = *cur + audio.len();
+            }
+        }
+        let tail = self.queue.split_off(position);
+        self.queue.extend(resolved);
+        self.queue.extend(tail);
+        Ok(())
+    }
+
+    fn remove(&mut self, range: ops::Range<usize>) -> Result<(), Box<error::Error>> {
+        if range.end >= self.queue.len() {
+            return Err(Box::from(library::PlaylistError::IndexOutOfBounds));
+        }
+        if let Some(mut cur) = self.queue_cursor.as_mut() {
+            if *cur >= range.end {
+                *cur = *cur - range.len();
+            } else if range.start <= *cur && range.end < *cur {
+                *cur = range.start;
+            }
+        }
+        self.queue.drain(range);
+        Ok(())
+    }
+
+    fn move_all(&mut self, from: &[usize]) -> Result<(), Box<error::Error>> {
+        if from.len() != self.queue.len() {
+            return Err(Box::from(library::PlaylistError::MoveLengthMismatch));
+        }
+        let new_queue = (0..from.len())
+            .map(|i| {
+                self.queue.get(i)
+                    .map(Clone::clone)
+                    .ok_or(library::PlaylistError::IndexOutOfBounds)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        if self.queue.len() != new_queue.len() {
+            return Err(Box::from(library::PlaylistError::MoveDuplicateIndices));
+        }
+
+        if let Some(mut cur) = self.queue_cursor.as_mut() {
+            *cur = *from.iter()
+                .find(|i| **i == *cur)
+                .unwrap();
+        }
+        self.queue = new_queue;
+        Ok(())
     }
 }
 

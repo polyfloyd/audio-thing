@@ -1,6 +1,8 @@
 use std::*;
 use std::borrow::Cow;
+use std::collections::BTreeSet;
 use std::sync::Arc;
+use rand::{self, Rng};
 use ::audio::*;
 
 pub mod fs;
@@ -12,8 +14,30 @@ pub trait Library {
     /// Returns the unique name of this library. May not contain whitespace.
     fn name(&self) -> Cow<str>;
 
+    fn find_by_id(&self, id: &Identity) -> Result<Option<Audio>, Box<error::Error>>;
+
     // TODO: search
     fn tracks(&self) -> Result<Box<iter::Iterator<Item=Arc<Track>>>, Box<error::Error>>;
+}
+
+pub fn resolve_all<L>(libs: &[L], ids: &[&Identity]) -> Result<Vec<Audio>, Box<error::Error>>
+    where L: borrow::Borrow<Library> {
+    ids.into_iter()
+        .filter_map(|id| {
+            let (name, _) = id.id();
+            let lib = libs.iter()
+                .find(|lib| lib.borrow().name() == name);
+            let lib = match lib {
+                Some(lib) => lib,
+                None => return Some(Err(Box::from(PlaylistError::MissingLibrary(name.into_owned())))),
+            };
+            match lib.borrow().find_by_id(id) {
+                Ok(Some(audio)) => Some(Ok(audio)),
+                Ok(None) => None,
+                Err(err) => Some(Err(err.into())),
+            }
+        })
+        .collect()
 }
 
 
@@ -93,7 +117,7 @@ pub trait Stream: Identity {
 }
 
 
-pub trait Playlist: Identity {
+pub trait Playlist {
     /// Gets the number of tracks in the playlist without loading its complete contents.
     fn len(&self) -> Result<usize, Box<error::Error>>;
     /// Returns the contents of the playlist
@@ -111,7 +135,7 @@ pub trait PlaylistMut: Playlist {
 
     /// Inserts the given audio into the specified position.
     fn insert(&mut self, position: usize, audio: &[&Identity]) -> Result<(), Box<error::Error>> {
-        let orig = self.contents()?.to_vec();
+        let orig = self.contents()?.into_owned();
         let contents: Vec<&Identity> = orig[..position].iter().map(|r| -> &Identity { r })
             .chain(audio.into_iter().map(|r| -> &Identity { r }))
             .chain(orig[position..].iter().map(|r| -> &Identity { r }))
@@ -121,8 +145,13 @@ pub trait PlaylistMut: Playlist {
     }
 
     /// Removes the specified range from the playlist.
+    ///
+    /// An error is returned if the range exceeds the size of the playlist.
     fn remove(&mut self, range: ops::Range<usize>) -> Result<(), Box<error::Error>> {
-        let orig = self.contents()?.to_vec();
+        let orig = self.contents()?.into_owned();
+        if range.end >= orig.len() {
+            return Err(Box::from(PlaylistError::IndexOutOfBounds));
+        }
         let contents: Vec<&Identity> = orig.iter().take(range.start)
             .chain(orig.iter().skip(range.end))
             .map(|r| -> &Identity { r })
@@ -137,8 +166,8 @@ pub trait PlaylistMut: Playlist {
     ///
     /// If `to` is inside the range to be moved, this is a no-op.
     fn splice(&mut self, from: ops::Range<usize>, to: usize) -> Result<(), Box<error::Error>> {
-        let orig = self.contents()?.to_vec();
-        let contents: Vec<&Identity> =
+        let orig: Vec<_> = (0..self.len()?).collect();
+        let contents: Vec<_> =
             if to < from.start {
                 orig[0..from.start].iter()
                     .chain(orig[from.end..to].iter())
@@ -153,25 +182,88 @@ pub trait PlaylistMut: Playlist {
                 // Target position is inside the range to be moved.
                 return Ok(());
             }
-            .map(|r| -> &Identity { r })
+            .map(|i| *i)
             .collect();
-        self.set_contents(contents.as_slice())?;
+        self.move_all(contents.as_slice())?;
         Ok(())
     }
 
     /// Reorders all items of this playlist based on the indices specified. The list index is the
     /// new position of the element while the value is the current position.
     ///
-    /// The index list should have the same size as this playlist.
+    /// Returns an error if either:
+    /// * The index list should have the same size as this playlist.
+    /// * One or more indices are out of bounds.
+    /// * There are duplicate indices.
     fn move_all(&mut self, from: &[usize]) -> Result<(), Box<error::Error>> {
-        let orig = self.contents()?.to_vec();
+        let orig = self.contents()?.into_owned();
         if from.len() != orig.len() {
-            unimplemented!();
+            return Err(Box::from(PlaylistError::MoveLengthMismatch));
         }
-        let contents: Vec<&Identity> = (0..orig.len())
-            .map(|i| -> &Identity { &orig[from[i]] })
-            .collect();
+        let contents = (0..orig.len())
+            .map(|i| -> Result<&Identity, _> {
+                if from[i] >= orig.len() {
+                    return Err(PlaylistError::IndexOutOfBounds);
+                }
+                Ok(&orig[from[i]])
+            })
+            .collect::<Result<Vec<_>, _>>();
+        let contents = contents?;
+        if contents.len() != orig.len() {
+            return Err(Box::from(PlaylistError::MoveDuplicateIndices));
+        }
         self.set_contents(contents.as_slice())?;
         Ok(())
+    }
+
+    /// Randomly reorders the contents of the playlist.
+    fn shuffle(&mut self) -> Result<(), Box<error::Error>> {
+        let mut rng = rand::thread_rng();
+        let mut set: BTreeSet<usize> = (0..self.len()?).collect();
+        let mut shuffled = Vec::with_capacity(set.len());
+        for _ in 0..set.len() {
+            let v = rng.gen::<usize>() % set.len();
+            shuffled.push(set.take(&v).unwrap())
+        }
+        self.move_all(shuffled.as_slice())?;
+        Ok(())
+    }
+}
+
+
+#[derive(Debug)]
+pub enum PlaylistError {
+    MissingLibrary(String),
+    IndexOutOfBounds,
+    MoveLengthMismatch,
+    MoveDuplicateIndices,
+}
+
+impl fmt::Display for PlaylistError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            PlaylistError::MissingLibrary(ref name) => {
+                write!(f, "No library named {}", name)
+            },
+            PlaylistError::IndexOutOfBounds => {
+                write!(f, "An index is larger than the playlist size")
+            },
+            PlaylistError::MoveLengthMismatch => {
+                write!(f, "Unable to move all elements, length of argument array mismatched")
+            },
+            PlaylistError::MoveDuplicateIndices => {
+                write!(f, "Unable to move all elements, there are duplicate indices")
+            },
+        }
+    }
+}
+
+impl error::Error for PlaylistError {
+    fn description(&self) -> &str {
+        "Playlist error"
+    }
+
+    fn cause(&self) -> Option<&error::Error> {
+        None
     }
 }

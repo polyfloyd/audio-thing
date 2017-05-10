@@ -9,6 +9,7 @@ extern crate lazy_static;
 #[macro_use]
 extern crate log;
 extern crate notify;
+extern crate rand;
 extern crate regex;
 extern crate rusqlite;
 extern crate sample;
@@ -34,9 +35,9 @@ fn main() {
         badlog::init(Some("debug"));
     }
 
-    let fs = library::fs::Filesystem::new(path::Path::new("testdata")).unwrap();
-
-    let player = player::Player::new(Box::new(player::output::pulse::Output{}));
+    let fs = sync::Arc::new(library::fs::Filesystem::new(path::Path::new("testdata")).unwrap());
+    let libs = vec![sync::Arc::<library::Library>::from(fs.clone())];
+    let player = player::Player::new(Box::new(player::output::pulse::Output{}), libs);
 
     let mut managed_id = env::args().nth(1)
         .map(|filename| {
@@ -58,7 +59,7 @@ fn main() {
                 let tracks: Vec<_> = fs.tracks().unwrap()
                     .collect();
                 for (i, track) in tracks.iter().enumerate() {
-                    write!(out, "{}: {} - {}", i, track.artists().get(0).unwrap_or(&"?".to_string()), track.title()).unwrap();
+                    writeln!(out, "{}: {} - {}", i, track.artists().get(0).unwrap_or(&"?".to_string()), track.title()).unwrap();
                 }
                 let track = lines.next().unwrap()
                     .unwrap_or("q".to_string())

@@ -181,6 +181,15 @@ impl library::Library for Filesystem {
         Cow::Borrowed("fs")
     }
 
+    fn find_by_id(&self, id: &library::Identity) -> Result<Option<library::Audio>, Box<error::Error>> {
+        let (lib, id) = id.id();
+        if lib == self.name() {
+            unimplemented!();
+        }
+        let track = self.track_by_path(path::Path::new(id.as_ref()))?;
+        Ok(track.map(library::Audio::Track))
+    }
+
     fn tracks(&self) -> Result<Box<iter::Iterator<Item=sync::Arc<library::Track>>>, Box<error::Error>> {
         let db = self.db.lock().unwrap();
         let mut stmt_tracks = db.prepare(r#"
