@@ -17,7 +17,7 @@ const MAX_FRAME_BYTES: usize = 1348;
 
 pub fn magic() -> &'static bytes::Regex {
     lazy_static! {
-        static ref MAGIC: bytes::Regex = bytes::Regex::new(r"^ID3").unwrap();
+        static ref MAGIC: bytes::Regex = bytes::Regex::new(r"(?s-u)^(?:ID3)|(:?\xff[\xe0-\xff])").unwrap();
     }
     &MAGIC
 }
