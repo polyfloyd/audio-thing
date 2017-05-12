@@ -257,16 +257,38 @@ fn add_to_index(db: &mut sqlite::Connection, path: &path::Path) -> Result<(), Er
         debug_assert!(fs::metadata(path)?.is_dir());
         for entry in fs::read_dir(path)? {
             let entry = entry?;
-            if entry.file_type()?.is_dir() {
+            let ftype = entry.file_type()?;
+
+            if ftype.is_dir() {
                 dir_add_recursive(db, &*entry.path())?;
+            } else if ftype.is_symlink() {
+                track_add(db, &*entry.path(), &fs::metadata(entry.path())?)?;
             } else {
-                track_add(db, &*entry.path())?;
+                track_add(db, &*entry.path(), &entry.metadata()?)?;
             }
         }
         return Ok(());
     }
-    fn track_add(db: &mut sqlite::Connection, path: &path::Path) -> Result<(), Error> {
-        debug_assert!(!fs::metadata(path)?.is_dir());
+    fn track_add(db: &mut sqlite::Connection, path: &path::Path, metadata: &fs::Metadata) -> Result<(), Error> {
+        assert!(metadata.is_file());
+
+        // Check whether the index is outdated by comparing the timestamp of the file with the one
+        // in the database.
+        let mtime = Timestamp(metadata.modified()?);
+        let path_str = path.to_str()
+            .ok_or(Error::BadPath(path.to_path_buf()))?;
+        let up_to_date = db.query_row(r#"
+            SELECT COUNT(*) AS "num" FROM "track"
+            WHERE "path" = ?1
+            AND "modified_at" = ?2
+            LIMIT 1
+        "#, &[
+            &path_str, &mtime], |row| row.get::<_, bool>("num"))?;
+        if up_to_date {
+            debug!("skipping (up to date): {}", path.to_string_lossy());
+            return Ok(());
+        }
+
         let rs = format::decode_file(path);
         if let Err(format::Error::Unsupported) = rs {
             // Not an audio file.
@@ -288,10 +310,13 @@ fn add_to_index(db: &mut sqlite::Connection, path: &path::Path) -> Result<(), Er
         Ok(())
     }
 
-    if fs::metadata(path)?.is_dir() {
+    let metadata = fs::metadata(path)?;
+    if metadata.file_type().is_dir() {
         dir_add_recursive(db, path)
+    } else if metadata.file_type().is_symlink() {
+        track_add(db, path, &fs::metadata(path)?)
     } else {
-        track_add(db, path)
+        track_add(db, path, &metadata)
     }
 }
 
@@ -306,12 +331,7 @@ fn track_upsert<P>(db: &mut sqlite::Connection, track: &MetadataTrack<P>) -> Res
         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
     "#, &[
         &path,
-        &(track.modified_at()
-            .and_then(|mtime| {
-                mtime.duration_since(time::UNIX_EPOCH).ok()
-            })
-            .map(|dur| dur.as_secs() as i64)
-            .ok_or(Error::Unspecified))?,
+        &track.modified_at().map(Timestamp),
         &(track.duration().as_secs() as i64),
         &track.title()
             .as_ref(),
@@ -377,6 +397,18 @@ fn init_db_functions(db: &mut sqlite::Connection) -> Result<(), Error> {
             })
     })?;
     Ok(())
+}
+
+
+struct Timestamp(time::SystemTime);
+
+impl sqlite::types::ToSql for Timestamp {
+    fn to_sql(&self) -> Result<sqlite::types::ToSqlOutput, sqlite::Error> {
+        let secs = self.0.duration_since(time::UNIX_EPOCH)
+            .map_err(|err| sqlite::Error::UserFunctionError(Box::from(err)))?
+            .as_secs();
+        Ok(sqlite::types::ToSqlOutput::Owned(sqlite::types::Value::Integer(secs as i64)))
+    }
 }
 
 
