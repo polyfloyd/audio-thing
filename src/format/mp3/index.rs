@@ -215,7 +215,8 @@ impl FrameIndex {
             let has_padding = header[2] >> 1 & 1 == 1;
             let num_channels = match header[3] >> 6 & 0x03 {
                 0b00 => 2, // Stereo
-                0b01 => 2, // Joint stereo
+                // Joint stereo. Actually 2 channels, but samples / channels gives funny results.
+                0b01 => 1,
                 0b10 => 2, // Dual channel
                 0b11 => 1, // Single channel
                 _ => unreachable!(),
@@ -225,11 +226,11 @@ impl FrameIndex {
                 L1 => 384,
                 L2|L3 => 1152,
             };
-            let slot_size = match layer {
-                L1 => 4,
-                L2|L3 => 1,
+            let padding = match (has_padding, layer) {
+                (false, _) => 0,
+                (_, L1) => 4,
+                (_, L2)|(_, L3) => 1,
             };
-            let padding = if has_padding { slot_size } else { 0 };
             let frame_length = match layer {
                 L1 => (12 * bitrate / sample_rate + padding) * 4,
                 L2|L3 => 144 * bitrate / sample_rate + padding,

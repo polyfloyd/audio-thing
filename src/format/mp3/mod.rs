@@ -91,12 +91,12 @@ pub fn decode<R>(mut input: R) -> Result<(dyn::Audio, format::Metadata), Error>
         macro_rules! dyn_type {
             ($dyn:path) => {
                 $dyn(Box::from(Decoder {
-                    input: input,
+                    input,
                     input_buf: [0; MAX_FRAME_BYTES],
-                    hip: hip,
+                    hip,
                     index: frame_index,
-                    sample_rate: sample_rate,
-                    num_samples: num_samples,
+                    sample_rate,
+                    num_samples,
                     buffers: [buf_left, buf_right],
                     next_frame: 0,
                     next_sample: 0,
