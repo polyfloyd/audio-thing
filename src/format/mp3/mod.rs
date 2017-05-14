@@ -36,7 +36,7 @@ pub fn decode<R>(mut input: R) -> Result<(dyn::Audio, format::Metadata), Error>
         }
     };
 
-    let frame_index = FrameIndex::new(&mut input)?;
+    let frame_index = FrameIndex::read(&mut input)?;
     input.seek(io::SeekFrom::Start(frame_index.frames[0].offset))?;
 
     unsafe {
@@ -79,9 +79,10 @@ pub fn decode<R>(mut input: R) -> Result<(dyn::Audio, format::Metadata), Error>
 
         let sample_rate = mp3_data.samplerate as u32;
         let num_channels = mp3_data.stereo as u32;
-        let num_samples = frame_index.frames.last()
-            .map(|frame| frame.sample_offset + frame.num_samples as u64)
-            .ok_or(Error::Unsupported)?;
+        let num_samples = {
+            let frame = frame_index.frames.last().unwrap();
+            frame.sample_offset + frame.num_samples as u64
+        };
 
         let meta = format::Metadata {
             sample_rate: sample_rate,
@@ -271,7 +272,6 @@ pub enum Error {
     Index(index::Error),
     Lame(i32),
     ConstructionFailed,
-    Unsupported,
 }
 
 impl fmt::Display for Error {
@@ -303,9 +303,6 @@ impl fmt::Display for Error {
             },
             Error::ConstructionFailed => {
                 write!(f, "Failed to construct decoder")
-            },
-            Error::Unsupported => {
-                write!(f, "Unsupported")
             },
         }
     }
@@ -341,5 +338,19 @@ impl From<id3::Error> for Error {
 impl From<index::Error> for Error {
     fn from(err: index::Error) -> Error {
         Error::Index(err)
+    }
+}
+
+#[cfg(all(test, feature = "unstable"))]
+mod benchmarks {
+    extern crate test;
+    use super::*;
+
+    #[bench]
+    fn read_metadata(b: &mut test::Bencher) {
+         b.iter(|| {
+             let file = fs::File::open("testdata/10s_440hz_320cbr_stereo.mp3").unwrap();
+             decode(file).unwrap();
+         });
     }
 }

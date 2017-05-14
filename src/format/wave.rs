@@ -353,3 +353,18 @@ impl From<id3::Error> for Error {
         Error::ID3(err)
     }
 }
+
+
+#[cfg(all(test, feature = "unstable"))]
+mod benchmarks {
+    extern crate test;
+    use super::*;
+
+    #[bench]
+    fn read_metadata(b: &mut test::Bencher) {
+         b.iter(|| {
+             let file = fs::File::open("testdata/10s_440hz_i16.wav").unwrap();
+             decode(file).unwrap();
+         });
+    }
+}

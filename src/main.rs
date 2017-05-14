@@ -1,3 +1,5 @@
+#![cfg_attr(all(test, feature = "unstable"), feature(test))]
+
 extern crate badlog;
 extern crate byteorder;
 #[macro_use]

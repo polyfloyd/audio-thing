@@ -126,6 +126,29 @@ fn find_bitrate(index: u8, version: MpegVersion, layer: MpegLayer) -> Result<Opt
     } * 1000))
 }
 
+/// Find and seek to the start of the next frame header.
+/// MP3 frame headers start with a sequence of 11 bits set to 1.
+fn find_stream<R>(input: &mut R) -> Result<(), Error>
+    where R: io::Read + io::Seek {
+    'sync_frame: loop {
+        let block_offset = input.seek(io::SeekFrom::Current(0))?;
+        let mut buf = [0; 8192];
+        let num_read = input.read(&mut buf)?;
+        if num_read <= 1 {
+            return Err(Error::MissingSync);
+        }
+        for (b, i) in buf[..num_read].windows(2).zip(block_offset..) {
+            if b[0] == 0xff && b[1] & 0xe0 == 0xe0 {
+                input.seek(io::SeekFrom::Start(i))?;
+                return Ok(());
+            }
+        }
+        // Go back one byte in case the two frame sync bytes are on a buffer size boundary.
+        input.seek(io::SeekFrom::Current(-1))?;
+    }
+}
+
+
 pub struct Frame {
     /// Absolute byte offset in the file.
     pub offset: u64,
@@ -144,28 +167,11 @@ pub struct FrameIndex {
 }
 
 impl FrameIndex {
-    pub fn new<R>(input: &mut R) -> Result<FrameIndex, Error>
+    pub fn read<R>(input: &mut R) -> Result<FrameIndex, Error>
         where R: io::Read + io::Seek {
         // http://mpgedit.org/mpgedit/mpeg_format/mpeghdr.htm
 
-        // Find and seek to the start of the next frame header.
-        // MP3 frame headers start with a sequence of 11 bits set to 1.
-        'sync_frame: loop {
-            let block_offset = input.seek(io::SeekFrom::Current(0))?;
-            let mut buf = [0; 8192];
-            let num_read = input.read(&mut buf)?;
-            if num_read <= 1 {
-                break;
-            }
-            for (b, i) in buf[..num_read].windows(2).zip(block_offset..) {
-                if b[0] == 0xff && b[1] & 0xe0 == 0xe0 {
-                    input.seek(io::SeekFrom::Start(i))?;
-                    break 'sync_frame;
-                }
-            }
-            // Go back one byte in case the two frame sync bytes are on a buffer size boundary.
-            input.seek(io::SeekFrom::Current(-1))?;
-        }
+        find_stream(input)?;
 
         let mut sample_count = 0;
         let mut frames = Vec::new();
@@ -311,5 +317,57 @@ impl error::Error for Error {
 impl From<io::Error> for Error {
     fn from(err: io::Error) -> Error {
         Error::IO(err)
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn find_stream_start() {
+        let mut cur = io::Cursor::new([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xe0, 0, 0, 0, 0]);
+        find_stream(&mut cur).unwrap();
+        assert_eq!(10, cur.position());
+    }
+
+    #[test]
+    fn find_stream_repeated() {
+        let mut cur = io::Cursor::new([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xe0, 0, 0, 0, 0]);
+        find_stream(&mut cur).unwrap();
+        assert_eq!(10, cur.position());
+        find_stream(&mut cur).unwrap();
+        assert_eq!(10, cur.position());
+        find_stream(&mut cur).unwrap();
+        assert_eq!(10, cur.position());
+    }
+}
+
+#[cfg(all(test, feature = "unstable"))]
+mod benchmarks {
+    extern crate test;
+    use std::io::Seek;
+    use super::*;
+
+    #[bench]
+    fn find_stream_start(b: &mut test::Bencher) {
+        b.iter(|| {
+            let mut file = fs::File::open("testdata/10s_440hz_320cbr_stereo.mp3").unwrap();
+            find_stream(&mut file).unwrap();
+        });
+    }
+
+    #[bench]
+    fn build_index(b: &mut test::Bencher) {
+        let mut file = fs::File::open("testdata/10s_440hz_320cbr_stereo.mp3").unwrap();
+        find_stream(&mut file).unwrap();
+        let stream_start = file.seek(io::SeekFrom::Current(0)).unwrap();
+
+        b.iter(|| {
+            let mut file = fs::File::open("testdata/10s_440hz_320cbr_stereo.mp3").unwrap();
+            file.seek(io::SeekFrom::Start(stream_start)).unwrap();
+            FrameIndex::read(&mut file).unwrap();
+        });
     }
 }

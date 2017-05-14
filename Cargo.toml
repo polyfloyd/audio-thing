@@ -4,6 +4,9 @@ version = "0.1.0"
 authors = ["polyfloyd <floyd@polyfloyd.net>"]
 publish = false
 
+[features]
+unstable = []
+
 [dependencies]
 badlog = "^0.2.5"
 byteorder = "^1.0.0"

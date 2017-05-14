@@ -580,3 +580,17 @@ mod tests {
         assert_eq!(tag.album_artist().unwrap(), "Various Artists");
     }
 }
+
+#[cfg(all(test, feature = "unstable"))]
+mod benchmarks {
+    extern crate test;
+    use super::*;
+
+    #[bench]
+    fn read_metadata(b: &mut test::Bencher) {
+         b.iter(|| {
+             let file = fs::File::open("testdata/10s_440hz_level8_16bit.flac").unwrap();
+             decode(file).unwrap();
+         });
+    }
+}
