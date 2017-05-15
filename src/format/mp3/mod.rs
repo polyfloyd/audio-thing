@@ -73,7 +73,9 @@ unsafe fn init_decoder<R>(input: &mut R) -> Result<(hip_t, mp3data_struct, [[i16
         return Err(Error::Lame(rs));
     }
     let decode_count = rs;
-    assert_eq!(1, mp3_data.header_parsed);
+    if mp3_data.header_parsed != 1 {
+        return Err(Error::NoHeader);
+    }
 
     Ok((hip, mp3_data, [buf_left, buf_right], decode_count as usize, stream_offset, id3_tag))
 }
@@ -298,6 +300,7 @@ pub enum Error {
     Index(index::Error),
     Lame(i32),
     ConstructionFailed,
+    NoHeader,
 }
 
 impl fmt::Display for Error {
@@ -329,6 +332,9 @@ impl fmt::Display for Error {
             },
             Error::ConstructionFailed => {
                 write!(f, "Failed to construct decoder")
+            },
+            Error::NoHeader => {
+                write!(f, "Missing header")
             },
         }
     }
