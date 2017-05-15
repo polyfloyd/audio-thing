@@ -73,12 +73,14 @@ impl Filesystem {
                     None => return,
                 };
                 let mut db = arc.lock().unwrap();
+                let update_start = time::SystemTime::now();
                 if let Err(err) = add_to_index(&mut db, &root) {
                     error!("error building index: {}", err);
                 }
                 if let Err(err) = track_clean_recursive(&mut db, path::Path::new("")) {
                     error!("error cleaning index: {}", err);
                 }
+                debug!("done updating index in {:?}", update_start.elapsed());
             }
 
             let (tx, rx) = mpsc::channel();
@@ -243,7 +245,7 @@ impl library::Library for Filesystem {
 
 /// Creates an ad-hoc track from a path.
 pub fn track_from_path(path: &path::Path) -> Result<sync::Arc<Track>, Error> {
-    let (_, metadata) = format::decode_file(path)?;
+    let metadata = format::decode_metadata_file(path)?;
     Ok(sync::Arc::new(MetadataTrack {
         path: path.to_path_buf(),
         meta: metadata,
@@ -289,13 +291,18 @@ fn add_to_index(db: &mut sqlite::Connection, path: &path::Path) -> Result<(), Er
             return Ok(());
         }
 
-        let rs = format::decode_file(path);
-        if let Err(format::Error::Unsupported) = rs {
-            // Not an audio file.
-            debug!("skipping (unsupported): {}", path.to_string_lossy());
-            return Ok(());
-        }
-        let (_, metadata) = rs?;
+        let metadata = match format::decode_metadata_file(path) {
+            Ok(t) => t,
+            Err(format::Error::Unsupported) => {
+                // Not an audio file.
+                debug!("skipping (unsupported): {}", path.to_string_lossy());
+                return Ok(());
+            },
+            Err(err) => {
+                error!("skipping ({}): {}", err, path.to_string_lossy());
+                return Ok(());
+            },
+        };
         if metadata.num_samples.is_none() {
             // A stream or a track without a known length.
             debug!("skipping (unknown length): {}", path.to_string_lossy());

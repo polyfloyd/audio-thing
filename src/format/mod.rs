@@ -7,11 +7,27 @@ pub mod flac;
 pub mod mp3;
 pub mod wave;
 
+pub fn decode_metadata_file<P>(path: P) -> Result<Metadata, Error>
+    where P: AsRef<path::Path> {
+    let mut buf = [0; 512];
+    let mut file = fs::File::open(path)?;
+    let nread = file.read(&mut buf)?;
+    file.seek(io::SeekFrom::Start(0))?;
+
+    let header = &buf[..nread];
+    if header.starts_with(flac::MAGIC) {
+        return Ok(flac::decode(file)?.1);
+    } else if mp3::magic().is_match(&header) {
+        return Ok(mp3::decode_metadata(file)?);
+    } else if wave::magic().is_match(&header) {
+        return Ok(wave::decode(file)?.1);
+    }
+
+    Err(Error::Unsupported)
+}
 
 pub fn decode_file<P>(path: P) -> Result<(dyn::Audio, Metadata), Error>
     where P: AsRef<path::Path> {
-    debug!("opening {} for decoding", path.as_ref().to_string_lossy());
-
     let mut buf = [0; 512];
     let mut file = fs::File::open(path)?;
     let nread = file.read(&mut buf)?;

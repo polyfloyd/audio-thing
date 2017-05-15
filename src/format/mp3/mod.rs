@@ -22,71 +22,99 @@ pub fn magic() -> &'static bytes::Regex {
     &MAGIC
 }
 
-
-pub fn decode<R>(mut input: R) -> Result<(dyn::Audio, format::Metadata), Error>
-    where R: io::Read + io::Seek + 'static {
+unsafe fn init_decoder<R>(input: &mut R) -> Result<(hip_t, mp3data_struct, [[i16; MAX_FRAME_SIZE]; 2], usize, u64, Option<id3::Tag>), Error>
+    where R: io::Read + io::Seek {
     let id3_tag = {
         let mut buf = [0; 3];
         input.read_exact(&mut buf)?;
         input.seek(io::SeekFrom::Start(0))?;
         if &buf == b"ID3" {
-            Some(id3::Tag::read_from(&mut input)?)
+            Some(id3::Tag::read_from(input)?)
         } else {
             None
         }
     };
 
-    let frame_index = FrameIndex::read(&mut input)?;
-    input.seek(io::SeekFrom::Start(frame_index.frames[0].offset))?;
+    /// On very rare occasions, LAME is unable to find the start of the stream.
+    index::find_stream(input)?;
+    let stream_offset = input.seek(io::SeekFrom::Current(0))?;
 
+    let hip: hip_t = hip_decode_init();
+    if hip.is_null() {
+        return Err(Error::ConstructionFailed);
+    }
+    hip_set_debugf(hip, Some(debug_cb));
+    hip_set_msgf(hip, Some(msg_cb));
+    hip_set_errorf(hip, Some(error_cb));
+
+    let mut mp3_data = mem::zeroed();
+    let mut enc_delay = 0;
+    let mut enc_padding = 0;
+    let mut buf_left = [0; MAX_FRAME_SIZE];
+    let mut buf_right = [0; MAX_FRAME_SIZE];
+
+    let mut rs = 0;
+    while rs == 0 {
+        let mut read_buf = [0; MAX_FRAME_BYTES];
+        let num_read = input.read(&mut read_buf)?;
+        rs = hip_decode1_headersB(
+            hip,
+            read_buf.as_mut_ptr(),
+            num_read,
+            buf_left.as_mut_ptr(),
+            buf_right.as_mut_ptr(),
+            &mut mp3_data,
+            &mut enc_delay,
+            &mut enc_padding,
+        );
+    }
+    if rs == -1 {
+        hip_decode_exit(hip);
+        return Err(Error::Lame(rs));
+    }
+    let decode_count = rs;
+    assert_eq!(1, mp3_data.header_parsed);
+
+    Ok((hip, mp3_data, [buf_left, buf_right], decode_count as usize, stream_offset, id3_tag))
+}
+
+pub fn decode_metadata<R>(mut input: R) -> Result<format::Metadata, Error>
+    where R: io::Read + io::Seek {
     unsafe {
-        let hip: hip_t = hip_decode_init();
-        if hip.is_null() {
-            return Err(Error::ConstructionFailed);
-        }
-        hip_set_debugf(hip, Some(debug_cb));
-        hip_set_msgf(hip, Some(msg_cb));
-        hip_set_errorf(hip, Some(error_cb));
+        let (hip, mp3_data, _, _, stream_offset, id3_tag) = init_decoder(&mut input)?;
+        hip_decode_exit(hip);
+        drop(hip);
 
-        let mut mp3_data = mem::zeroed();
-        let mut enc_delay = 0;
-        let mut enc_padding = 0;
-        let mut buf_left = [0; MAX_FRAME_SIZE];
-        let mut buf_right = [0; MAX_FRAME_SIZE];
+        let num_samples = if mp3_data.nsamp != 0 {
+            mp3_data.nsamp
+        } else {
+            input.seek(io::SeekFrom::Start(stream_offset))?;
+            let frame_index = FrameIndex::read(&mut input)?;
+            frame_index.num_samples()
+        };
+        Ok(format::Metadata {
+            sample_rate: mp3_data.samplerate as u32,
+            num_samples: Some(num_samples),
+            tag: id3_tag,
+        })
+    }
+}
 
-        let mut rs = 0;
-        while rs == 0 {
-            let mut read_buf = [0; MAX_FRAME_BYTES];
-            let num_read = input.read(&mut read_buf)?;
-            rs = hip_decode1_headersB(
-                hip,
-                read_buf.as_mut_ptr(),
-                num_read,
-                buf_left.as_mut_ptr(),
-                buf_right.as_mut_ptr(),
-                &mut mp3_data,
-                &mut enc_delay,
-                &mut enc_padding,
-            );
-        }
-        if rs == -1 {
-            hip_decode_exit(hip);
-            return Err(Error::Lame(rs));
-        }
-        let decode_count = rs;
-        assert_eq!(1, mp3_data.header_parsed);
-        assert_eq!(MAX_FRAME_SIZE, mp3_data.framesize as usize);
 
+pub fn decode<R>(mut input: R) -> Result<(dyn::Audio, format::Metadata), Error>
+    where R: io::Read + io::Seek + 'static {
+    unsafe {
+        let (hip, mp3_data, buffers, decode_count, stream_offset, id3_tag) = init_decoder(&mut input)?;
         let sample_rate = mp3_data.samplerate as u32;
         let num_channels = mp3_data.stereo as u32;
-        let num_samples = {
-            let frame = frame_index.frames.last().unwrap();
-            frame.sample_offset + frame.num_samples as u64
-        };
+
+        input.seek(io::SeekFrom::Start(stream_offset))?;
+        let frame_index = FrameIndex::read(&mut input)?;
+        input.seek(io::SeekFrom::Start(frame_index.frames[0].offset))?;
 
         let meta = format::Metadata {
             sample_rate: sample_rate,
-            num_samples: Some(num_samples),
+            num_samples: Some(frame_index.num_samples()),
             tag: id3_tag,
         };
         macro_rules! dyn_type {
@@ -95,13 +123,12 @@ pub fn decode<R>(mut input: R) -> Result<(dyn::Audio, format::Metadata), Error>
                     input,
                     input_buf: [0; MAX_FRAME_BYTES],
                     hip,
-                    index: frame_index,
+                    frame_index,
                     sample_rate,
-                    num_samples,
-                    buffers: [buf_left, buf_right],
+                    buffers,
                     next_frame: 0,
                     next_sample: 0,
-                    samples_available: decode_count as usize,
+                    samples_available: decode_count,
                     _f: marker::PhantomData,
                 })).into()
             }
@@ -121,9 +148,8 @@ struct Decoder<F, R>
     input: R,
     input_buf: [u8; MAX_FRAME_BYTES],
     hip: hip_t,
-    index: FrameIndex,
+    frame_index: FrameIndex,
     sample_rate: u32,
-    num_samples: u64,
 
     buffers: [[i16; MAX_FRAME_SIZE]; 2],
     next_frame: usize,
@@ -154,10 +180,10 @@ impl<F, R> iter::Iterator for Decoder<F, R>
                 );
                 match rs {
                     0 => {
-                        if self.next_frame >= self.index.frames.len() {
+                        if self.next_frame >= self.frame_index.frames.len() {
                             return None;
                         }
-                        let frame = &self.index.frames[self.next_frame];
+                        let frame = &self.frame_index.frames[self.next_frame];
                         num_read = match self.input.read(&mut self.input_buf[..frame.length as usize]) {
                             Ok(nr) if nr == 0 => return None,
                             Ok(nr) => nr,
@@ -198,28 +224,28 @@ impl<F, R> Seekable for Decoder<F, R>
     where F: sample::Frame<Sample=i16>,
           R: io::Read + io::Seek + 'static {
     fn seek(&mut self, position: u64) -> Result<(), SeekError> {
-        let i = self.index.frame_for_sample(position)
+        let i = self.frame_index.frame_for_sample(position)
             .ok_or(SeekError::OutofRange { pos: position, size: self.length() })?;
         self.next_frame = i;
-        self.next_sample = position as usize - self.index.frames[i].sample_offset as usize;
+        self.next_sample = position as usize - self.frame_index.frames[i].sample_offset as usize;
         self.samples_available = 0;
-        assert!(self.next_frame < self.index.frames.len());
+        assert!(self.next_frame < self.frame_index.frames.len());
         assert!(self.next_sample < MAX_FRAME_SIZE);
-        let frame = &self.index.frames[self.next_frame];
+        let frame = &self.frame_index.frames[self.next_frame];
         self.input.seek(io::SeekFrom::Start(frame.offset))
             .map_err(Box::from)?;
         Ok(())
     }
 
     fn length(&self) -> u64 {
-        self.num_samples
+        self.frame_index.num_samples()
     }
 
     fn current_position(&self) -> u64 {
         if self.next_frame == 0 {
             return 0;
         }
-        self.index.frames[self.next_frame - 1].sample_offset + self.next_sample as u64
+        self.frame_index.frames[self.next_frame - 1].sample_offset + self.next_sample as u64
     }
 }
 
@@ -348,6 +374,14 @@ mod benchmarks {
 
     #[bench]
     fn read_metadata(b: &mut test::Bencher) {
+         b.iter(|| {
+             let file = fs::File::open("testdata/10s_440hz_320cbr_stereo.mp3").unwrap();
+             decode_metadata(file).unwrap();
+         });
+    }
+
+    #[bench]
+    fn decoder_open(b: &mut test::Bencher) {
          b.iter(|| {
              let file = fs::File::open("testdata/10s_440hz_320cbr_stereo.mp3").unwrap();
              decode(file).unwrap();

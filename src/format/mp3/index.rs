@@ -128,7 +128,7 @@ fn find_bitrate(index: u8, version: MpegVersion, layer: MpegLayer) -> Result<Opt
 
 /// Find and seek to the start of the next frame header.
 /// MP3 frame headers start with a sequence of 11 bits set to 1.
-fn find_stream<R>(input: &mut R) -> Result<(), Error>
+pub fn find_stream<R>(input: &mut R) -> Result<(), Error>
     where R: io::Read + io::Seek {
     'sync_frame: loop {
         let block_offset = input.seek(io::SeekFrom::Current(0))?;
@@ -258,6 +258,11 @@ impl FrameIndex {
             return Err(Error::MissingSync);
         }
         Ok(FrameIndex { frames: frames })
+    }
+
+    pub fn num_samples(&self) -> u64 {
+        let frame = self.frames.last().unwrap();
+        frame.sample_offset + frame.num_samples as u64
     }
 
     pub fn frame_for_sample(&self, nth_sample: u64) -> Option<usize> {
