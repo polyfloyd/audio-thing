@@ -10,7 +10,7 @@ mod release;
 pub use self::release::*;
 
 
-pub trait Library {
+pub trait Library: Send + Sync {
     /// Returns the unique name of this library. May not contain whitespace.
     fn name(&self) -> Cow<str>;
 
