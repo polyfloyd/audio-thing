@@ -198,7 +198,7 @@ impl<P> library::TrackInfo for MetadataTrack<P>
     fn rating(&self) -> Option<u8> {
         self.meta.tag.as_ref()
             .and_then(|t| t.get("POPM"))
-            .and_then(|frame| frame.content.unknown())
+            .and_then(|frame| frame.content().unknown())
             .and_then(|data| {
                 data.iter()
                     .position(|b| *b == 0)
@@ -217,9 +217,9 @@ impl<P> library::TrackInfo for MetadataTrack<P>
     fn release(&self) -> Option<library::Release> {
         self.meta.tag.as_ref()
             .and_then(|t| {
-                t.get_all("TDRL")
-                    .into_iter()
-                    .filter_map(|frame| frame.content.text())
+                t.frames()
+                    .filter(|frame| frame.id() == "TDRL")
+                    .filter_map(|frame| frame.content().text())
                     .filter_map(|st| st.parse().ok())
                     .fold(None, |acc: Option<library::Release>, b| match acc {
                         None => Some(b),

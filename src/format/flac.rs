@@ -398,9 +398,8 @@ unsafe extern "C" fn metadata_cb<R>(_: *const FLAC__StreamDecoder, metadata: *co
                         continue;
                     },
                 };
-                let mut frame = id3::Frame::new(id);
-                frame.content = content;
-                meta.tag.as_mut().unwrap().push(frame);
+                meta.tag.as_mut().unwrap()
+                    .add_frame(id3::Frame::with_content(id, content));
             }
         },
         FLAC__METADATA_TYPE_PICTURE => {
@@ -442,14 +441,14 @@ unsafe extern "C" fn metadata_cb<R>(_: *const FLAC__StreamDecoder, metadata: *co
             };
             let mut data = Vec::with_capacity(picture.data_length as usize);
             data.extend_from_slice(slice::from_raw_parts(picture.data, picture.data_length as usize));
-            let mut frame = id3::Frame::new("APIC");
-            frame.content = id3::frame::Content::Picture(id3::frame::Picture{
+            let content = id3::frame::Content::Picture(id3::frame::Picture{
                 mime_type: mime.to_string(),
                 picture_type: typ,
                 description: description,
                 data: data,
             });
-            meta.tag.as_mut().unwrap().push(frame);
+            meta.tag.as_mut().unwrap()
+                .add_frame(id3::Frame::with_content("APIC", content));
         },
         _ => (),
     }
@@ -576,7 +575,7 @@ mod tests {
         assert_eq!(tag.title().unwrap(), "Lucy in the Cloud with Sine Waves");
         assert_eq!(tag.artist().unwrap(), "The B-Trees");
         assert_eq!(tag.album().unwrap(), "Dark Sine of the Moon");
-        assert_eq!(tag.date_released().unwrap(), id3::Timestamp::parse("1984").unwrap());
+        assert_eq!(tag.date_released().unwrap(), "1984".parse().unwrap());
         assert_eq!(tag.album_artist().unwrap(), "Various Artists");
     }
 }

@@ -22,14 +22,14 @@ pub fn magic() -> &'static bytes::Regex {
     &MAGIC
 }
 
-unsafe fn init_decoder<R>(input: &mut R) -> Result<(hip_t, mp3data_struct, [[i16; MAX_FRAME_SIZE]; 2], usize, u64, Option<id3::Tag>), Error>
+unsafe fn init_decoder<R>(mut input: &mut R) -> Result<(hip_t, mp3data_struct, [[i16; MAX_FRAME_SIZE]; 2], usize, u64, Option<id3::Tag>), Error>
     where R: io::Read + io::Seek {
     let id3_tag = {
         let mut buf = [0; 3];
         input.read_exact(&mut buf)?;
         input.seek(io::SeekFrom::Start(0))?;
         if &buf == b"ID3" {
-            Some(id3::Tag::read_from(input)?)
+            Some(id3::Tag::read_from(&mut input)?)
         } else {
             None
         }
