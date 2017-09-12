@@ -4,6 +4,9 @@ version = "0.1.0"
 authors = ["polyfloyd <floyd@polyfloyd.net>"]
 publish = false
 
+[profile.dev]
+opt-level = 3
+
 [features]
 unstable = []
 
