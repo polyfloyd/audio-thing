@@ -1,6 +1,6 @@
 [package]
 name = "liblame_sys"
-version = "3.99.0"
+version = "0.0.1"
 authors = ["polyfloyd <floyd@polyfloyd.net>"]
 build = "build.rs"
 

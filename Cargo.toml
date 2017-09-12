@@ -21,6 +21,6 @@ regex = "^0.2.1"
 rusqlite = { version = "^0.11.0", features = [ "functions" ] }
 sample = "^0.6.2"
 xdg = "^2.1.0"
-libflac_sys = { version = "^1.3.2", path = "libflac_sys" }
-liblame_sys = { version = "^3.99.0", path = "liblame_sys" }
-libpulse_sys = { version = "^10.0.0", path = "libpulse_sys" }
+libflac_sys = { path = "libflac_sys" }
+liblame_sys = { path = "liblame_sys" }
+libpulse_sys = { path = "libpulse_sys" }

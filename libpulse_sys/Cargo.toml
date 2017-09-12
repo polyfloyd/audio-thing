@@ -1,6 +1,6 @@
 [package]
 name = "libpulse_sys"
-version = "10.0.1"
+version = "0.0.1"
 authors = ["polyfloyd <floyd@polyfloyd.net>"]
 build = "build.rs"
 
