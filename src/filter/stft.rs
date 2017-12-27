@@ -78,7 +78,7 @@ impl<T, O> iter::Iterator for Inverse<T, O>
                 .drain(0..self.stft.window_size() - self.stft.window_overlap());
         }
 
-        let (mut front, back) = {
+        let (front, back) = {
             let mut w = self.windows.iter_mut();
             (w.next().unwrap(), w.next().unwrap())
         };

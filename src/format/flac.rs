@@ -278,7 +278,7 @@ unsafe extern "C" fn write_cb<R>(_: *const FLAC__StreamDecoder, frame: *const FL
 
 unsafe extern "C" fn read_cb<R>(_: *const FLAC__StreamDecoder, buffer: *mut u8, bytes: *mut usize, client_data: *mut os::raw::c_void) -> FLAC__StreamDecoderReadStatus
     where R: io::Read {
-    let mut data = (client_data as *mut DecoderCallbackData<R>).as_mut().unwrap();
+    let data = (client_data as *mut DecoderCallbackData<R>).as_mut().unwrap();
 
     let mut buf = slice::from_raw_parts_mut(buffer, *bytes);
     *bytes = match data.input.read(&mut buf) {
@@ -294,7 +294,7 @@ unsafe extern "C" fn read_cb<R>(_: *const FLAC__StreamDecoder, buffer: *mut u8, 
 
 unsafe extern "C" fn seek_cb<R>(_: *const FLAC__StreamDecoder, absolute_byte_offset: u64, client_data: *mut os::raw::c_void) -> FLAC__StreamDecoderSeekStatus
     where R: io::Read + io::Seek {
-    let mut data = (client_data as *mut DecoderCallbackData<R>).as_mut().unwrap();
+    let data = (client_data as *mut DecoderCallbackData<R>).as_mut().unwrap();
     match data.input.seek(io::SeekFrom::Start(absolute_byte_offset)) {
         Ok(_) => FLAC__StreamDecoderSeekStatus::FLAC__STREAM_DECODER_SEEK_STATUS_OK,
         Err(_) => FLAC__StreamDecoderSeekStatus::FLAC__STREAM_DECODER_SEEK_STATUS_ERROR,
@@ -303,7 +303,7 @@ unsafe extern "C" fn seek_cb<R>(_: *const FLAC__StreamDecoder, absolute_byte_off
 
 unsafe extern "C" fn tell_cb<R>(_: *const FLAC__StreamDecoder, absolute_byte_offset: *mut u64, client_data: *mut os::raw::c_void) -> FLAC__StreamDecoderTellStatus
     where R: io::Read + io::Seek + SeekExt {
-    let mut data = (client_data as *mut DecoderCallbackData<R>).as_mut().unwrap();
+    let data = (client_data as *mut DecoderCallbackData<R>).as_mut().unwrap();
     if let Ok(pos) = data.input.tell() {
         *absolute_byte_offset = pos;
         return FLAC__StreamDecoderTellStatus::FLAC__STREAM_DECODER_TELL_STATUS_OK;
@@ -313,7 +313,7 @@ unsafe extern "C" fn tell_cb<R>(_: *const FLAC__StreamDecoder, absolute_byte_off
 
 unsafe extern "C" fn length_cb<R>(_: *const FLAC__StreamDecoder, stream_length: *mut u64, client_data: *mut os::raw::c_void) -> FLAC__StreamDecoderLengthStatus
     where R: io::Read + io::Seek + SeekExt {
-    let mut data = (client_data as *mut DecoderCallbackData<R>).as_mut().unwrap();
+    let data = (client_data as *mut DecoderCallbackData<R>).as_mut().unwrap();
     if let Ok(pos) = data.input.length() {
         *stream_length = pos;
         return FLAC__StreamDecoderLengthStatus::FLAC__STREAM_DECODER_LENGTH_STATUS_OK;
@@ -323,7 +323,7 @@ unsafe extern "C" fn length_cb<R>(_: *const FLAC__StreamDecoder, stream_length: 
 
 unsafe extern "C" fn eof_cb<R>(_: *const FLAC__StreamDecoder, client_data: *mut os::raw::c_void) -> i32
     where R: io::Read + io::Seek + SeekExt {
-    let mut data = (client_data as *mut DecoderCallbackData<R>).as_mut().unwrap();
+    let data = (client_data as *mut DecoderCallbackData<R>).as_mut().unwrap();
     if data.input.at_eof() {
         1
     } else {
@@ -333,8 +333,8 @@ unsafe extern "C" fn eof_cb<R>(_: *const FLAC__StreamDecoder, client_data: *mut 
 
 unsafe extern "C" fn metadata_cb<R>(_: *const FLAC__StreamDecoder, metadata: *const FLAC__StreamMetadata, client_data: *mut os::raw::c_void)
     where R: io::Read + io::Seek + SeekExt {
-    let mut data = (client_data as *mut DecoderCallbackData<R>).as_mut().unwrap();
-    let mut meta = match data.meta.as_mut() {
+    let data = (client_data as *mut DecoderCallbackData<R>).as_mut().unwrap();
+    let meta = match data.meta.as_mut() {
         Some(meta) => meta,
         None => {
             warn!("picuture encountered after initialisation");

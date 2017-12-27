@@ -239,7 +239,7 @@ impl library::Library for Filesystem {
                 Ok(track)
             })?
             .collect(); // TODO: Stream results instead of collecting.
-        Ok(Box::from(tracks?.into_iter().map(|t| sync::Arc::<library::Track>::from(sync::Arc::from(t)))))
+        Ok(Box::from(tracks?.into_iter().map(|t| -> sync::Arc<library::Track> { sync::Arc::new(t) })))
     }
 }
 

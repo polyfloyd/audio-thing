@@ -35,7 +35,7 @@ unsafe fn init_decoder<R>(mut input: &mut R) -> Result<(hip_t, mp3data_struct, [
         }
     };
 
-    /// On very rare occasions, LAME is unable to find the start of the stream.
+    // On very rare occasions, LAME is unable to find the start of the stream.
     index::find_stream(input)?;
     let stream_offset = input.seek(io::SeekFrom::Current(0))?;
 

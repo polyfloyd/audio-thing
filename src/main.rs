@@ -38,7 +38,7 @@ fn main() {
     }
 
     let fs = sync::Arc::new(library::fs::Filesystem::new(path::Path::new("testdata")).unwrap());
-    let libs = vec![sync::Arc::<library::Library>::from(fs.clone())];
+    let libs: Vec<sync::Arc<library::Library>> = vec![fs.clone()];
     let player = player::Player::new(Box::new(player::output::pulse::Output{}), libs);
 
     let mut managed_id = env::args().nth(1)

@@ -113,7 +113,7 @@ impl Player {
         };
         self.playing.clear();
         self.queue_cursor = Some(index);
-        let (id, mut pb) = self.init_playback(audio)?;
+        let (id, pb) = self.init_playback(audio)?;
         pb.set_state(State::Playing);
         Ok(Some((id, pb)))
     }
@@ -167,7 +167,7 @@ impl library::PlaylistMut for Player {
             return Err(Box::from(library::PlaylistError::IndexOutOfBounds));
         }
         let resolved = library::resolve_all(&self.libraries[..], audio)?;
-        if let Some(mut cur) = self.queue_cursor.as_mut() {
+        if let Some(cur) = self.queue_cursor.as_mut() {
             if position < *cur {
                 *cur = *cur + audio.len();
             }
@@ -182,7 +182,7 @@ impl library::PlaylistMut for Player {
         if range.end >= self.queue.len() {
             return Err(Box::from(library::PlaylistError::IndexOutOfBounds));
         }
-        if let Some(mut cur) = self.queue_cursor.as_mut() {
+        if let Some(cur) = self.queue_cursor.as_mut() {
             if *cur >= range.end {
                 *cur = *cur - range.len();
             } else if range.start <= *cur && range.end < *cur {
@@ -208,7 +208,7 @@ impl library::PlaylistMut for Player {
             return Err(Box::from(library::PlaylistError::MoveDuplicateIndices));
         }
 
-        if let Some(mut cur) = self.queue_cursor.as_mut() {
+        if let Some(cur) = self.queue_cursor.as_mut() {
             *cur = *from.iter()
                 .find(|i| **i == *cur)
                 .unwrap();
