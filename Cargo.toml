@@ -11,19 +11,19 @@ opt-level = 3
 unstable = []
 
 [dependencies]
-badlog = "^0.2.5"
-byteorder = "^1.0.0"
-derive-error = "^0.0.3"
-dft = "^0.5.4"
-id3 = { rev = "0be2f40a", git = "https://github.com/jameshurst/rust-id3" }
-lazy_static = "^0.2.8"
-log = "^0.3.7"
-notify = "^4.0.1"
-rand = "^0.3.15"
-regex = "^0.2.1"
-rusqlite = { version = "^0.11.0", features = [ "functions" ] }
-sample = "^0.6.2"
-xdg = "^2.1.0"
+badlog = "1.0.0"
+byteorder = "1.2.1"
+derive-error = "0.0.4"
+dft = "0.5.5"
+id3 = "0.2.3"
+lazy_static = "1.0.0"
+log = "0.4.0"
+notify = "4.0.3"
+rand = "0.4.1"
+regex = "0.2.3"
+rusqlite = { version = "0.13.0", features = [ "functions" ] }
+sample = "0.9.0"
+xdg = "2.1.0"
 libflac_sys = { path = "libflac_sys" }
 liblame_sys = { path = "liblame_sys" }
 libpulse_sys = { path = "libpulse_sys" }
