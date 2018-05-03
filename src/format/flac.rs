@@ -337,15 +337,15 @@ unsafe extern "C" fn metadata_cb<R>(_: *const FLAC__StreamDecoder, metadata: *co
     let meta = match data.meta.as_mut() {
         Some(meta) => meta,
         None => {
-            warn!("picuture encountered after initialisation");
+            warn!("picture encountered after initialisation");
             return;
         },
     };
 
-    use libflac_sys::FLAC__MetadataType::*;
+    use self::FLAC__MetadataType::*;
     match (*metadata).type_ {
         FLAC__METADATA_TYPE_VORBIS_COMMENT => {
-            let comment = (*metadata).data.vorbis_comment.as_ref();
+            let comment = (*metadata).data.vorbis_comment;
             let strings = slice::from_raw_parts(comment.comments, comment.num_comments as usize)
                 .iter()
                 .filter_map(|c| entry_as_str(c))
@@ -403,7 +403,7 @@ unsafe extern "C" fn metadata_cb<R>(_: *const FLAC__StreamDecoder, metadata: *co
             }
         },
         FLAC__METADATA_TYPE_PICTURE => {
-            let picture = (*metadata).data.picture.as_ref();
+            let picture = (*metadata).data.picture;
             let mime = match ffi::CStr::from_ptr(picture.mime_type).to_str() {
                 Ok(s) => s,
                 Err(err) => {
