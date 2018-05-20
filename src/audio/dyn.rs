@@ -38,7 +38,7 @@ pub enum Source {
 
 impl Source {
     fn num_channels(&self) -> u32 {
-        match *self {
+        match self {
             Source::MonoI8(_) => 1,
             Source::MonoU8(_) => 1,
             Source::MonoI16(_) => 1,
@@ -67,7 +67,7 @@ impl Source {
     }
 
     fn bits_per_sample(&self) -> u32 {
-        match *self {
+        match self {
             Source::MonoI8(_) => 8,
             Source::MonoU8(_) => 8,
             Source::MonoI16(_) => 16,
@@ -96,7 +96,7 @@ impl Source {
     }
 
     pub fn format(&self) -> Format {
-        match *self {
+        match self {
             Source::MonoI8(_) => Format::Signed,
             Source::MonoU8(_) => Format::Unsigned,
             Source::MonoI16(_) => Format::Signed,
@@ -125,31 +125,31 @@ impl Source {
     }
 
     pub fn sample_rate(&self) -> u32 {
-        match *self {
-            Source::MonoI8(ref s) => s.sample_rate(),
-            Source::MonoU8(ref s) => s.sample_rate(),
-            Source::MonoI16(ref s) => s.sample_rate(),
-            Source::MonoU16(ref s) => s.sample_rate(),
-            Source::MonoI24(ref s) => s.sample_rate(),
-            Source::MonoU24(ref s) => s.sample_rate(),
-            Source::MonoI32(ref s) => s.sample_rate(),
-            Source::MonoU32(ref s) => s.sample_rate(),
-            Source::MonoI64(ref s) => s.sample_rate(),
-            Source::MonoU64(ref s) => s.sample_rate(),
-            Source::MonoF32(ref s) => s.sample_rate(),
-            Source::MonoF64(ref s) => s.sample_rate(),
-            Source::StereoI8(ref s) => s.sample_rate(),
-            Source::StereoU8(ref s) => s.sample_rate(),
-            Source::StereoI16(ref s) => s.sample_rate(),
-            Source::StereoU16(ref s) => s.sample_rate(),
-            Source::StereoI24(ref s) => s.sample_rate(),
-            Source::StereoU24(ref s) => s.sample_rate(),
-            Source::StereoI32(ref s) => s.sample_rate(),
-            Source::StereoU32(ref s) => s.sample_rate(),
-            Source::StereoI64(ref s) => s.sample_rate(),
-            Source::StereoU64(ref s) => s.sample_rate(),
-            Source::StereoF32(ref s) => s.sample_rate(),
-            Source::StereoF64(ref s) => s.sample_rate(),
+        match self {
+            Source::MonoI8(s) => s.sample_rate(),
+            Source::MonoU8(s) => s.sample_rate(),
+            Source::MonoI16(s) => s.sample_rate(),
+            Source::MonoU16(s) => s.sample_rate(),
+            Source::MonoI24(s) => s.sample_rate(),
+            Source::MonoU24(s) => s.sample_rate(),
+            Source::MonoI32(s) => s.sample_rate(),
+            Source::MonoU32(s) => s.sample_rate(),
+            Source::MonoI64(s) => s.sample_rate(),
+            Source::MonoU64(s) => s.sample_rate(),
+            Source::MonoF32(s) => s.sample_rate(),
+            Source::MonoF64(s) => s.sample_rate(),
+            Source::StereoI8(s) => s.sample_rate(),
+            Source::StereoU8(s) => s.sample_rate(),
+            Source::StereoI16(s) => s.sample_rate(),
+            Source::StereoU16(s) => s.sample_rate(),
+            Source::StereoI24(s) => s.sample_rate(),
+            Source::StereoU24(s) => s.sample_rate(),
+            Source::StereoI32(s) => s.sample_rate(),
+            Source::StereoU32(s) => s.sample_rate(),
+            Source::StereoI64(s) => s.sample_rate(),
+            Source::StereoU64(s) => s.sample_rate(),
+            Source::StereoF32(s) => s.sample_rate(),
+            Source::StereoF64(s) => s.sample_rate(),
         }
     }
 }
@@ -190,7 +190,7 @@ pub enum Seek {
 
 impl Seek {
     fn num_channels(&self) -> u32 {
-        match *self {
+        match self {
             Seek::MonoI8(_) => 1,
             Seek::MonoU8(_) => 1,
             Seek::MonoI16(_) => 1,
@@ -219,7 +219,7 @@ impl Seek {
     }
 
     fn bits_per_sample(&self) -> u32 {
-        match *self {
+        match self {
             Seek::MonoI8(_) => 8,
             Seek::MonoU8(_) => 8,
             Seek::MonoI16(_) => 16,
@@ -248,7 +248,7 @@ impl Seek {
     }
 
     pub fn format(&self) -> Format {
-        match *self {
+        match self {
             Seek::MonoI8(_) => Format::Signed,
             Seek::MonoU8(_) => Format::Unsigned,
             Seek::MonoI16(_) => Format::Signed,
@@ -277,31 +277,31 @@ impl Seek {
     }
 
     pub fn sample_rate(&self) -> u32 {
-        match *self {
-            Seek::MonoI8(ref s) => s.sample_rate(),
-            Seek::MonoU8(ref s) => s.sample_rate(),
-            Seek::MonoI16(ref s) => s.sample_rate(),
-            Seek::MonoU16(ref s) => s.sample_rate(),
-            Seek::MonoI24(ref s) => s.sample_rate(),
-            Seek::MonoU24(ref s) => s.sample_rate(),
-            Seek::MonoI32(ref s) => s.sample_rate(),
-            Seek::MonoU32(ref s) => s.sample_rate(),
-            Seek::MonoI64(ref s) => s.sample_rate(),
-            Seek::MonoU64(ref s) => s.sample_rate(),
-            Seek::MonoF32(ref s) => s.sample_rate(),
-            Seek::MonoF64(ref s) => s.sample_rate(),
-            Seek::StereoI8(ref s) => s.sample_rate(),
-            Seek::StereoU8(ref s) => s.sample_rate(),
-            Seek::StereoI16(ref s) => s.sample_rate(),
-            Seek::StereoU16(ref s) => s.sample_rate(),
-            Seek::StereoI24(ref s) => s.sample_rate(),
-            Seek::StereoU24(ref s) => s.sample_rate(),
-            Seek::StereoI32(ref s) => s.sample_rate(),
-            Seek::StereoU32(ref s) => s.sample_rate(),
-            Seek::StereoI64(ref s) => s.sample_rate(),
-            Seek::StereoU64(ref s) => s.sample_rate(),
-            Seek::StereoF32(ref s) => s.sample_rate(),
-            Seek::StereoF64(ref s) => s.sample_rate(),
+        match self {
+            Seek::MonoI8(s) => s.sample_rate(),
+            Seek::MonoU8(s) => s.sample_rate(),
+            Seek::MonoI16(s) => s.sample_rate(),
+            Seek::MonoU16(s) => s.sample_rate(),
+            Seek::MonoI24(s) => s.sample_rate(),
+            Seek::MonoU24(s) => s.sample_rate(),
+            Seek::MonoI32(s) => s.sample_rate(),
+            Seek::MonoU32(s) => s.sample_rate(),
+            Seek::MonoI64(s) => s.sample_rate(),
+            Seek::MonoU64(s) => s.sample_rate(),
+            Seek::MonoF32(s) => s.sample_rate(),
+            Seek::MonoF64(s) => s.sample_rate(),
+            Seek::StereoI8(s) => s.sample_rate(),
+            Seek::StereoU8(s) => s.sample_rate(),
+            Seek::StereoI16(s) => s.sample_rate(),
+            Seek::StereoU16(s) => s.sample_rate(),
+            Seek::StereoI24(s) => s.sample_rate(),
+            Seek::StereoU24(s) => s.sample_rate(),
+            Seek::StereoI32(s) => s.sample_rate(),
+            Seek::StereoU32(s) => s.sample_rate(),
+            Seek::StereoI64(s) => s.sample_rate(),
+            Seek::StereoU64(s) => s.sample_rate(),
+            Seek::StereoF32(s) => s.sample_rate(),
+            Seek::StereoF64(s) => s.sample_rate(),
         }
     }
 }
@@ -364,14 +364,14 @@ impl Audio {
     }
 
     pub fn is_seek(&self) -> bool {
-        match *self {
+        match self {
             Audio::Source(_) => false,
             Audio::Seek(_) => true,
         }
     }
 
     pub fn sample_rate(&self) -> u32 {
-        match *self {
+        match self {
             Audio::Source(ref s) => s.sample_rate(),
             Audio::Seek(ref s) => s.sample_rate(),
         }

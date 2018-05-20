@@ -62,17 +62,15 @@ impl Release {
 
 impl Ord for Release {
     fn cmp(&self, other: &Release) -> cmp::Ordering {
-        let y = self.year().cmp(&other.year());
-        if y != cmp::Ordering::Equal {
-            return y;
-        }
-        let m = self.month().unwrap_or(0)
-            .cmp(&other.month().unwrap_or(0));
-        if m != cmp::Ordering::Equal {
-            return m;
-        }
-        self.day().unwrap_or(0)
-            .cmp(&other.day().unwrap_or(0))
+        self.year().cmp(&other.year())
+            .then_with(|| {
+                self.month().unwrap_or(0)
+                    .cmp(&other.month().unwrap_or(0))
+            })
+        .then_with(|| {
+            self.day().unwrap_or(0)
+                .cmp(&other.day().unwrap_or(0))
+        })
     }
 }
 

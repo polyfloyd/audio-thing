@@ -56,10 +56,7 @@ impl<T, O> iter::Iterator for Inverse<T, O>
     fn next(&mut self) -> Option<Self::Item> {
         assert_eq!(2, self.windows.len());
         if self.windows.front().unwrap().len() == 0 {
-            let mut blocks = match self.stft.next() {
-                Some(blocks) => blocks,
-                None => return None,
-            };
+            let mut blocks = self.stft.next()?;
             for block in &mut blocks {
                 dft::transform(block, &self.fft_plan);
             }
