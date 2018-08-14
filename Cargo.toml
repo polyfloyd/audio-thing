@@ -12,17 +12,17 @@ unstable = []
 
 [dependencies]
 badlog = "1.1.1"
-byteorder = "1.2.2"
+byteorder = "1.2.4"
 derive-error = "0.0.4"
 dft = "0.5.5"
-id3 = "0.2.3"
-lazy_static = "1.0.0"
-log = "0.4.1"
-notify = "4.0.3"
-rand = "0.4.2"
-regex = "1.0.0"
+id3 = "0.2.4"
+lazy_static = "1.1.0"
+log = "0.4.3"
+notify = "4.0.4"
+rand = "0.5.5"
+regex = "1.0.2"
 rusqlite = { version = "0.13.0", features = [ "functions" ] }
-sample = "0.9.1"
+sample = "0.10.0"
 xdg = "2.1.0"
 libflac_sys = { path = "libflac_sys" }
 liblame_sys = { path = "liblame_sys" }
