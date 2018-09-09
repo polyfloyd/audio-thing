@@ -1,29 +1,42 @@
-use std::*;
+use audio::*;
+use format;
 use id3;
-use regex::bytes;
 use liblame_sys::*;
+use regex::bytes;
 use sample;
-use ::audio::*;
-use ::format;
+use std::*;
 
 mod index;
 use self::index::FrameIndex;
-
 
 /// This is the absolute maximum number of samples that can be contained in a single frame.
 const MAX_FRAME_SIZE: usize = 1152;
 const MAX_FRAME_BYTES: usize = 1348;
 
-
 pub fn magic() -> &'static bytes::Regex {
     lazy_static! {
-        static ref MAGIC: bytes::Regex = bytes::Regex::new(r"(?s-u)^(?:ID3)|(:?\xff[\xe0-\xff])").unwrap();
+        static ref MAGIC: bytes::Regex =
+            bytes::Regex::new(r"(?s-u)^(?:ID3)|(:?\xff[\xe0-\xff])").unwrap();
     }
     &MAGIC
 }
 
-unsafe fn init_decoder<R>(mut input: &mut R) -> Result<(hip_t, mp3data_struct, [[i16; MAX_FRAME_SIZE]; 2], usize, u64, Option<id3::Tag>), Error>
-    where R: io::Read + io::Seek {
+unsafe fn init_decoder<R>(
+    mut input: &mut R,
+) -> Result<
+    (
+        hip_t,
+        mp3data_struct,
+        [[i16; MAX_FRAME_SIZE]; 2],
+        usize,
+        u64,
+        Option<id3::Tag>,
+    ),
+    Error,
+>
+where
+    R: io::Read + io::Seek,
+{
     let id3_tag = {
         let mut buf = [0; 3];
         input.read_exact(&mut buf)?;
@@ -77,11 +90,20 @@ unsafe fn init_decoder<R>(mut input: &mut R) -> Result<(hip_t, mp3data_struct, [
         return Err(Error::NoHeader);
     }
 
-    Ok((hip, mp3_data, [buf_left, buf_right], decode_count as usize, stream_offset, id3_tag))
+    Ok((
+        hip,
+        mp3_data,
+        [buf_left, buf_right],
+        decode_count as usize,
+        stream_offset,
+        id3_tag,
+    ))
 }
 
 pub fn decode_metadata<R>(mut input: R) -> Result<format::Metadata, Error>
-    where R: io::Read + io::Seek {
+where
+    R: io::Read + io::Seek,
+{
     unsafe {
         let (hip, mp3_data, _, _, stream_offset, id3_tag) = init_decoder(&mut input)?;
         hip_decode_exit(hip);
@@ -102,11 +124,13 @@ pub fn decode_metadata<R>(mut input: R) -> Result<format::Metadata, Error>
     }
 }
 
-
 pub fn decode<R>(mut input: R) -> Result<(dyn::Audio, format::Metadata), Error>
-    where R: io::Read + io::Seek + 'static {
+where
+    R: io::Read + io::Seek + 'static,
+{
     unsafe {
-        let (hip, mp3_data, buffers, decode_count, stream_offset, id3_tag) = init_decoder(&mut input)?;
+        let (hip, mp3_data, buffers, decode_count, stream_offset, id3_tag) =
+            init_decoder(&mut input)?;
         let sample_rate = mp3_data.samplerate as u32;
         let num_channels = mp3_data.stereo as u32;
 
@@ -133,20 +157,24 @@ pub fn decode<R>(mut input: R) -> Result<(dyn::Audio, format::Metadata), Error>
                     samples_available: decode_count,
                     _f: marker::PhantomData,
                 })).into()
-            }
+            };
         }
-        Ok((match num_channels {
-            1 => dyn_type!(dyn::Seek::MonoI16),
-            2 => dyn_type!(dyn::Seek::StereoI16),
-            _ => unreachable!(), // LAME's interface does not allow this.
-        }, meta))
+        Ok((
+            match num_channels {
+                1 => dyn_type!(dyn::Seek::MonoI16),
+                2 => dyn_type!(dyn::Seek::StereoI16),
+                _ => unreachable!(), // LAME's interface does not allow this.
+            },
+            meta,
+        ))
     }
 }
 
-
 struct Decoder<F, R>
-    where F: sample::Frame<Sample=i16>,
-          R: io::Read + io::Seek + 'static {
+where
+    F: sample::Frame<Sample = i16>,
+    R: io::Read + io::Seek + 'static,
+{
     input: R,
     input_buf: [u8; MAX_FRAME_BYTES],
     hip: hip_t,
@@ -162,12 +190,16 @@ struct Decoder<F, R>
 }
 
 unsafe impl<F, R> Send for Decoder<F, R>
-    where F: sample::Frame<Sample=i16>,
-          R: io::Read + io::Seek + 'static { }
+where
+    F: sample::Frame<Sample = i16>,
+    R: io::Read + io::Seek + 'static,
+{}
 
 impl<F, R> iter::Iterator for Decoder<F, R>
-    where F: sample::Frame<Sample=i16>,
-          R: io::Read + io::Seek + 'static {
+where
+    F: sample::Frame<Sample = i16>,
+    R: io::Read + io::Seek + 'static,
+{
     type Item = F;
     fn next(&mut self) -> Option<Self::Item> {
         let mut num_read = 0;
@@ -186,24 +218,27 @@ impl<F, R> iter::Iterator for Decoder<F, R>
                             return None;
                         }
                         let frame = &self.frame_index.frames[self.next_frame];
-                        num_read = match self.input.read(&mut self.input_buf[..frame.length as usize]) {
+                        num_read = match self
+                            .input
+                            .read(&mut self.input_buf[..frame.length as usize])
+                        {
                             Ok(nr) if nr == 0 => return None,
                             Ok(nr) => nr,
                             Err(err) => {
                                 error!("{}", err);
                                 return None;
-                            },
+                            }
                         };
-                    },
+                    }
                     code if code < 0 => {
                         error!("Error decoding next frame: {}", Error::Lame(code));
                         return None;
-                    },
+                    }
                     decode_count => {
                         self.next_frame += 1;
                         self.next_sample = 0;
                         self.samples_available = decode_count as usize;
-                    },
+                    }
                 };
             }
         }
@@ -215,26 +250,36 @@ impl<F, R> iter::Iterator for Decoder<F, R>
 }
 
 impl<F, R> Source for Decoder<F, R>
-    where F: sample::Frame<Sample=i16>,
-          R: io::Read + io::Seek + 'static {
+where
+    F: sample::Frame<Sample = i16>,
+    R: io::Read + io::Seek + 'static,
+{
     fn sample_rate(&self) -> u32 {
         self.sample_rate
     }
 }
 
 impl<F, R> Seekable for Decoder<F, R>
-    where F: sample::Frame<Sample=i16>,
-          R: io::Read + io::Seek + 'static {
+where
+    F: sample::Frame<Sample = i16>,
+    R: io::Read + io::Seek + 'static,
+{
     fn seek(&mut self, position: u64) -> Result<(), SeekError> {
-        let i = self.frame_index.frame_for_sample(position)
-            .ok_or(SeekError::OutofRange { pos: position, size: self.length() })?;
+        let i = self
+            .frame_index
+            .frame_for_sample(position)
+            .ok_or(SeekError::OutofRange {
+                pos: position,
+                size: self.length(),
+            })?;
         self.next_frame = i;
         self.next_sample = position as usize - self.frame_index.frames[i].sample_offset as usize;
         self.samples_available = 0;
         assert!(self.next_frame < self.frame_index.frames.len());
         assert!(self.next_sample < MAX_FRAME_SIZE);
         let frame = &self.frame_index.frames[self.next_frame];
-        self.input.seek(io::SeekFrom::Start(frame.offset))
+        self.input
+            .seek(io::SeekFrom::Start(frame.offset))
             .map_err(Box::from)?;
         Ok(())
     }
@@ -252,19 +297,22 @@ impl<F, R> Seekable for Decoder<F, R>
 }
 
 impl<F, R> Seek for Decoder<F, R>
-    where F: sample::Frame<Sample=i16>,
-          R: io::Read + io::Seek + 'static { }
+where
+    F: sample::Frame<Sample = i16>,
+    R: io::Read + io::Seek + 'static,
+{}
 
 impl<F, R> Drop for Decoder<F, R>
-    where F: sample::Frame<Sample=i16>,
-          R: io::Read + io::Seek + 'static {
+where
+    F: sample::Frame<Sample = i16>,
+    R: io::Read + io::Seek + 'static,
+{
     fn drop(&mut self) {
         unsafe {
             hip_decode_exit(self.hip);
         }
     }
 }
-
 
 unsafe extern "C" fn debug_cb(format: *const os::raw::c_char, ap: *mut __va_list_tag) {
     debug!("{}", VaFormatter(format, ap));
@@ -287,11 +335,14 @@ impl fmt::Display for VaFormatter {
             // A buffer two times the format should be enough in most cases.
             let mut buf = vec![0u8; cstr.to_bytes().len() * 2];
             vsnprintf(buf.as_mut_ptr() as *mut i8, buf.len(), self.0, self.1);
-            write!(f, "{}", String::from_utf8_lossy(&*buf).trim_matches(&['\0', '\n'][..]))
+            write!(
+                f,
+                "{}",
+                String::from_utf8_lossy(&*buf).trim_matches(&['\0', '\n'][..])
+            )
         }
     }
 }
-
 
 #[derive(Debug)]
 pub enum Error {
@@ -306,15 +357,9 @@ pub enum Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            Error::IO(ref err) => {
-                write!(f, "IO: {}", err)
-            },
-            Error::ID3(ref err) => {
-                write!(f, "ID3: {}", err)
-            },
-            Error::Index(ref err) => {
-                write!(f, "Index: {}", err)
-            },
+            Error::IO(ref err) => write!(f, "IO: {}", err),
+            Error::ID3(ref err) => write!(f, "ID3: {}", err),
+            Error::Index(ref err) => write!(f, "Index: {}", err),
             Error::Lame(code) => {
                 let msg = match code {
                     0 => "okay",
@@ -329,13 +374,9 @@ impl fmt::Display for Error {
                     _ => "unknown",
                 };
                 write!(f, "Lame error: {}", msg)
-            },
-            Error::ConstructionFailed => {
-                write!(f, "Failed to construct decoder")
-            },
-            Error::NoHeader => {
-                write!(f, "Missing header")
-            },
+            }
+            Error::ConstructionFailed => write!(f, "Failed to construct decoder"),
+            Error::NoHeader => write!(f, "Missing header"),
         }
     }
 }
@@ -380,17 +421,17 @@ mod benchmarks {
 
     #[bench]
     fn read_metadata(b: &mut test::Bencher) {
-         b.iter(|| {
-             let file = fs::File::open("testdata/10s_440hz_320cbr_stereo.mp3").unwrap();
-             decode_metadata(file).unwrap();
-         });
+        b.iter(|| {
+            let file = fs::File::open("testdata/10s_440hz_320cbr_stereo.mp3").unwrap();
+            decode_metadata(file).unwrap();
+        });
     }
 
     #[bench]
     fn decoder_open(b: &mut test::Bencher) {
-         b.iter(|| {
-             let file = fs::File::open("testdata/10s_440hz_320cbr_stereo.mp3").unwrap();
-             decode(file).unwrap();
-         });
+        b.iter(|| {
+            let file = fs::File::open("testdata/10s_440hz_320cbr_stereo.mp3").unwrap();
+            decode(file).unwrap();
+        });
     }
 }

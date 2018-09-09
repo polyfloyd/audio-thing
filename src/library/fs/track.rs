@@ -1,11 +1,10 @@
-use std::*;
-use std::borrow::Cow;
-use regex::Regex;
-use ::audio::*;
-use ::format;
-use ::library;
 use super::Error;
-
+use audio::*;
+use format;
+use library;
+use regex::Regex;
+use std::borrow::Cow;
+use std::*;
 
 pub struct RawTrack {
     pub path: String,
@@ -48,8 +47,7 @@ impl library::TrackInfo for RawTrack {
     }
 
     fn album_title(&self) -> Option<Cow<str>> {
-        self.album_title.as_ref()
-            .map(|s| Cow::Borrowed(s.as_str()))
+        self.album_title.as_ref().map(|s| Cow::Borrowed(s.as_str()))
     }
 
     fn album_artists(&self) -> Cow<[String]> {
@@ -80,8 +78,7 @@ impl library::Track for RawTrack {
 
     fn audio(&self) -> Result<dyn::Seek, Box<error::Error>> {
         let (decoder, _) = format::decode_file(path::Path::new(&self.path))?;
-        decoder.into_seek()
-            .ok_or(Box::from(Error::NonSeek))
+        decoder.into_seek().ok_or(Box::from(Error::NonSeek))
     }
 
     fn duration(&self) -> time::Duration {
@@ -89,34 +86,40 @@ impl library::Track for RawTrack {
     }
 }
 
-
 pub struct MetadataTrack<P>
-    where P: AsRef<path::Path> + Send + Sync {
+where
+    P: AsRef<path::Path> + Send + Sync,
+{
     pub path: P,
     pub meta: format::Metadata,
 }
 
 impl<P> library::Identity for MetadataTrack<P>
-    where P: AsRef<path::Path> + Send + Sync {
+where
+    P: AsRef<path::Path> + Send + Sync,
+{
     fn id(&self) -> (Cow<str>, Cow<str>) {
         ("fs".into(), self.path.as_ref().to_string_lossy())
     }
 }
 
 impl<P> library::TrackInfo for MetadataTrack<P>
-    where P: AsRef<path::Path> + Send + Sync {
+where
+    P: AsRef<path::Path> + Send + Sync,
+{
     fn title(&self) -> Cow<str> {
         lazy_static! {
             static ref FROM_STEM: Regex = Regex::new(r"^(?:.* - .*)* - (.+)$").unwrap();
         }
-        self.meta.tag.as_ref()
+        self.meta
+            .tag
+            .as_ref()
             .and_then(|t| t.title())
             .map(|t| Cow::Borrowed(t))
             .unwrap_or_else(|| {
-                let stem = self.path.as_ref().file_stem()
-                    .unwrap()
-                    .to_string_lossy();
-                FROM_STEM.captures(&*stem)
+                let stem = self.path.as_ref().file_stem().unwrap().to_string_lossy();
+                FROM_STEM
+                    .captures(&*stem)
                     .and_then(|cap| cap.get(1))
                     .map(|m| m.as_str().to_string().into())
                     .unwrap_or(stem)
@@ -127,14 +130,15 @@ impl<P> library::TrackInfo for MetadataTrack<P>
         lazy_static! {
             static ref FROM_STEM: Regex = Regex::new(r"^(?:.* - )(.+) - (:?.+)$").unwrap();
         }
-        self.meta.tag.as_ref()
+        self.meta
+            .tag
+            .as_ref()
             .and_then(|t| t.artist())
             .map(|a| vec![a.to_string()])
             .unwrap_or_else(|| {
-                let stem = self.path.as_ref().file_stem()
-                    .unwrap()
-                    .to_string_lossy();
-                FROM_STEM.captures(&*stem)
+                let stem = self.path.as_ref().file_stem().unwrap().to_string_lossy();
+                FROM_STEM
+                    .captures(&*stem)
                     .and_then(|cap| cap.get(1))
                     .map(|m| vec![m.as_str().into()])
                     .unwrap_or(vec![])
@@ -147,25 +151,27 @@ impl<P> library::TrackInfo for MetadataTrack<P>
     }
 
     fn genres(&self) -> Cow<[String]> {
-        self.meta.tag.as_ref()
+        self.meta
+            .tag
+            .as_ref()
             .and_then(|t| t.genre())
-            .map(|g| {
-                g.split(',')
-                    .map(|t| t.trim().to_string())
-                    .collect()
-            })
+            .map(|g| g.split(',').map(|t| t.trim().to_string()).collect())
             .unwrap_or(vec![])
             .into()
     }
 
     fn album_title(&self) -> Option<Cow<str>> {
-        self.meta.tag.as_ref()
+        self.meta
+            .tag
+            .as_ref()
             .and_then(|t| t.album())
             .map(|t| Cow::Borrowed(t))
     }
 
     fn album_artists(&self) -> Cow<[String]> {
-        self.meta.tag.as_ref()
+        self.meta
+            .tag
+            .as_ref()
             .and_then(|t| t.album_artist())
             .map(|a| vec![a.to_string()])
             .unwrap_or(vec![])
@@ -173,7 +179,9 @@ impl<P> library::TrackInfo for MetadataTrack<P>
     }
 
     fn album_disc(&self) -> Option<i32> {
-        self.meta.tag.as_ref()
+        self.meta
+            .tag
+            .as_ref()
             .and_then(|t| t.disc())
             .map(|i| i as i32)
     }
@@ -182,21 +190,24 @@ impl<P> library::TrackInfo for MetadataTrack<P>
         lazy_static! {
             static ref FROM_STEM: Regex = Regex::new(r"^0*([1-9]\d*)").unwrap();
         }
-        self.meta.tag.as_ref()
+        self.meta
+            .tag
+            .as_ref()
             .and_then(|t| t.track())
             .map(|i| i as i32)
             .or_else(|| {
-                let stem = self.path.as_ref().file_stem()
-                    .unwrap()
-                    .to_string_lossy();
-                FROM_STEM.captures(&*stem)
+                let stem = self.path.as_ref().file_stem().unwrap().to_string_lossy();
+                FROM_STEM
+                    .captures(&*stem)
                     .and_then(|cap| cap.get(1))
                     .and_then(|m| m.as_str().parse().ok())
             })
     }
 
     fn rating(&self) -> Option<u8> {
-        self.meta.tag.as_ref()
+        self.meta
+            .tag
+            .as_ref()
             .and_then(|t| t.get("POPM"))
             .and_then(|frame| frame.content().unknown())
             .and_then(|data| {
@@ -215,22 +226,23 @@ impl<P> library::TrackInfo for MetadataTrack<P>
     }
 
     fn release(&self) -> Option<library::Release> {
-        self.meta.tag.as_ref()
-            .and_then(|t| {
-                t.frames()
-                    .filter(|frame| frame.id() == "TDRL")
-                    .filter_map(|frame| frame.content().text())
-                    .filter_map(|st| st.parse().ok())
-                    .fold(None, |acc: Option<library::Release>, b| match acc {
-                        None => Some(b),
-                        Some(acc) => Some(acc.most_precise(b)),
-                    })
-            })
+        self.meta.tag.as_ref().and_then(|t| {
+            t.frames()
+                .filter(|frame| frame.id() == "TDRL")
+                .filter_map(|frame| frame.content().text())
+                .filter_map(|st| st.parse().ok())
+                .fold(None, |acc: Option<library::Release>, b| match acc {
+                    None => Some(b),
+                    Some(acc) => Some(acc.most_precise(b)),
+                })
+        })
     }
 }
 
 impl<P> library::Track for MetadataTrack<P>
-    where P: AsRef<path::Path> + Send + Sync {
+where
+    P: AsRef<path::Path> + Send + Sync,
+{
     fn modified_at(&self) -> Option<time::SystemTime> {
         fs::metadata(&self.path)
             .and_then(|stat| stat.modified())
@@ -239,23 +251,20 @@ impl<P> library::Track for MetadataTrack<P>
 
     fn audio(&self) -> Result<dyn::Seek, Box<error::Error>> {
         let (decoder, _) = format::decode_file(&self.path)?;
-        decoder.into_seek()
-            .ok_or(Box::from(Error::NonSeek))
+        decoder.into_seek().ok_or(Box::from(Error::NonSeek))
     }
 
     fn duration(&self) -> time::Duration {
-        let num_samples = self.meta.num_samples
-            .expect("Unkown number of samples");
+        let num_samples = self.meta.num_samples.expect("Unkown number of samples");
         duration_of(self.meta.sample_rate, num_samples)
     }
 }
-
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use id3;
-    use ::library::TrackInfo;
+    use library::TrackInfo;
 
     #[test]
     fn test_tags() {

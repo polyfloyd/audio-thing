@@ -1,11 +1,10 @@
-use std::*;
+use library::fs::*;
+use library::{self, Identity};
 use std::borrow::Cow;
 use std::io::BufRead;
 use std::io::Write;
 use std::sync::{Mutex, Weak};
-use ::library::{self, Identity};
-use ::library::fs::*;
-
+use std::*;
 
 /// A playlist that can loads and stores itself to M3U.
 ///
@@ -45,8 +44,7 @@ impl library::Playlist for Playlist {
     }
 
     fn contents(&self) -> Result<Cow<[library::Audio]>, Box<error::Error>> {
-        let fs = self.fs.upgrade()
-            .ok_or_else(|| Error::Unspecified)?;
+        let fs = self.fs.upgrade().ok_or_else(|| Error::Unspecified)?;
         let contents = read_m3u(&*fs.lock().unwrap(), path::Path::new(&self.file))?;
         Ok(Cow::Owned(contents))
     }
@@ -58,18 +56,22 @@ impl library::Playlist for Playlist {
 
 impl library::PlaylistMut for Playlist {
     fn set_contents(&mut self, contents: &[&library::Identity]) -> Result<(), Box<error::Error>> {
-        let fs_arc = self.fs.upgrade()
-            .ok_or(Error::Unspecified)?;
+        let fs_arc = self.fs.upgrade().ok_or(Error::Unspecified)?;
         let fs = fs_arc.lock().unwrap();
         let mut file = fs::File::open(&self.file)?;
         write!(file, "#EXTM3U\n")?;
         for entry in contents.into_iter() {
             let (lib, id) = entry.id();
             if lib != self.id().0 {
-                return Err(Box::from(Error::Unspecified))
+                return Err(Box::from(Error::Unspecified));
             }
             if let Some(track) = fs.track_by_path(path::Path::new(&*id))? {
-                write!(file, "#EXTINF:{},{}\n", track.duration().as_secs(), track.title())?;
+                write!(
+                    file,
+                    "#EXTINF:{},{}\n",
+                    track.duration().as_secs(),
+                    track.title()
+                )?;
             } else {
                 write!(file, "#EXTINF:0,\n")?;
             }
@@ -92,13 +94,13 @@ fn read_m3u(fs: &Filesystem, file: &path::Path) -> Result<Vec<library::Audio>, B
             Cow::Borrowed(entry)
         } else {
             let path = path::Path::new(file)
-                .parent().ok_or(Error::Unspecified)?
+                .parent()
+                .ok_or(Error::Unspecified)?
                 .join(entry)
                 .canonicalize()?;
             Cow::Owned(path)
         };
-        let track = fs.track_by_path(&path)?
-            .map(|t| library::Audio::Track(t));
+        let track = fs.track_by_path(&path)?.map(|t| library::Audio::Track(t));
         contents.extend(track.into_iter());
     }
     Ok(contents)

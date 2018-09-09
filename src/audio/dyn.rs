@@ -1,5 +1,5 @@
-use std::*;
 use sample::{I24, U24};
+use std::*;
 
 #[derive(Copy, Clone, Debug)]
 pub enum Format {
@@ -8,32 +8,31 @@ pub enum Format {
     Unsigned,
 }
 
-
 pub enum Source {
-    MonoI8(   Box<super::Source<Item=[i8;  1]> + Send>),
-    MonoU8(   Box<super::Source<Item=[u8;  1]> + Send>),
-    MonoI16(  Box<super::Source<Item=[i16; 1]> + Send>),
-    MonoU16(  Box<super::Source<Item=[u16; 1]> + Send>),
-    MonoI24(  Box<super::Source<Item=[I24; 1]> + Send>),
-    MonoU24(  Box<super::Source<Item=[U24; 1]> + Send>),
-    MonoI32(  Box<super::Source<Item=[i32; 1]> + Send>),
-    MonoU32(  Box<super::Source<Item=[u32; 1]> + Send>),
-    MonoI64(  Box<super::Source<Item=[i64; 1]> + Send>),
-    MonoU64(  Box<super::Source<Item=[u64; 1]> + Send>),
-    MonoF32(  Box<super::Source<Item=[f32; 1]> + Send>),
-    MonoF64(  Box<super::Source<Item=[f64; 1]> + Send>),
-    StereoI8( Box<super::Source<Item=[i8;  2]> + Send>),
-    StereoU8( Box<super::Source<Item=[u8;  2]> + Send>),
-    StereoI24(Box<super::Source<Item=[I24; 2]> + Send>),
-    StereoU24(Box<super::Source<Item=[U24; 2]> + Send>),
-    StereoI16(Box<super::Source<Item=[i16; 2]> + Send>),
-    StereoU16(Box<super::Source<Item=[u16; 2]> + Send>),
-    StereoI32(Box<super::Source<Item=[i32; 2]> + Send>),
-    StereoU32(Box<super::Source<Item=[u32; 2]> + Send>),
-    StereoI64(Box<super::Source<Item=[i64; 2]> + Send>),
-    StereoU64(Box<super::Source<Item=[u64; 2]> + Send>),
-    StereoF32(Box<super::Source<Item=[f32; 2]> + Send>),
-    StereoF64(Box<super::Source<Item=[f64; 2]> + Send>),
+    MonoI8(Box<super::Source<Item = [i8; 1]> + Send>),
+    MonoU8(Box<super::Source<Item = [u8; 1]> + Send>),
+    MonoI16(Box<super::Source<Item = [i16; 1]> + Send>),
+    MonoU16(Box<super::Source<Item = [u16; 1]> + Send>),
+    MonoI24(Box<super::Source<Item = [I24; 1]> + Send>),
+    MonoU24(Box<super::Source<Item = [U24; 1]> + Send>),
+    MonoI32(Box<super::Source<Item = [i32; 1]> + Send>),
+    MonoU32(Box<super::Source<Item = [u32; 1]> + Send>),
+    MonoI64(Box<super::Source<Item = [i64; 1]> + Send>),
+    MonoU64(Box<super::Source<Item = [u64; 1]> + Send>),
+    MonoF32(Box<super::Source<Item = [f32; 1]> + Send>),
+    MonoF64(Box<super::Source<Item = [f64; 1]> + Send>),
+    StereoI8(Box<super::Source<Item = [i8; 2]> + Send>),
+    StereoU8(Box<super::Source<Item = [u8; 2]> + Send>),
+    StereoI24(Box<super::Source<Item = [I24; 2]> + Send>),
+    StereoU24(Box<super::Source<Item = [U24; 2]> + Send>),
+    StereoI16(Box<super::Source<Item = [i16; 2]> + Send>),
+    StereoU16(Box<super::Source<Item = [u16; 2]> + Send>),
+    StereoI32(Box<super::Source<Item = [i32; 2]> + Send>),
+    StereoU32(Box<super::Source<Item = [u32; 2]> + Send>),
+    StereoI64(Box<super::Source<Item = [i64; 2]> + Send>),
+    StereoU64(Box<super::Source<Item = [u64; 2]> + Send>),
+    StereoF32(Box<super::Source<Item = [f32; 2]> + Send>),
+    StereoF64(Box<super::Source<Item = [f64; 2]> + Send>),
 }
 
 impl Source {
@@ -155,37 +154,43 @@ impl Source {
 }
 
 impl fmt::Debug for Source {
-   fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-       write!(f, "Source(channels={},bits={},fmt={:?},rate={}hz)", self.num_channels(), self.bits_per_sample(), self.format(), self.sample_rate())
-   }
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        write!(
+            f,
+            "Source(channels={},bits={},fmt={:?},rate={}hz)",
+            self.num_channels(),
+            self.bits_per_sample(),
+            self.format(),
+            self.sample_rate()
+        )
+    }
 }
 
-
 pub enum Seek {
-    MonoI8(   Box<super::Seek<Item=[i8;  1]> + Send>),
-    MonoU8(   Box<super::Seek<Item=[u8;  1]> + Send>),
-    MonoI16(  Box<super::Seek<Item=[i16; 1]> + Send>),
-    MonoU16(  Box<super::Seek<Item=[u16; 1]> + Send>),
-    MonoI24(  Box<super::Seek<Item=[I24; 1]> + Send>),
-    MonoU24(  Box<super::Seek<Item=[U24; 1]> + Send>),
-    MonoI32(  Box<super::Seek<Item=[i32; 1]> + Send>),
-    MonoU32(  Box<super::Seek<Item=[u32; 1]> + Send>),
-    MonoI64(  Box<super::Seek<Item=[i64; 1]> + Send>),
-    MonoU64(  Box<super::Seek<Item=[u64; 1]> + Send>),
-    MonoF32(  Box<super::Seek<Item=[f32; 1]> + Send>),
-    MonoF64(  Box<super::Seek<Item=[f64; 1]> + Send>),
-    StereoI8( Box<super::Seek<Item=[i8;  2]> + Send>),
-    StereoU8( Box<super::Seek<Item=[u8;  2]> + Send>),
-    StereoI16(Box<super::Seek<Item=[i16; 2]> + Send>),
-    StereoU16(Box<super::Seek<Item=[u16; 2]> + Send>),
-    StereoI24(Box<super::Seek<Item=[I24; 2]> + Send>),
-    StereoU24(Box<super::Seek<Item=[U24; 2]> + Send>),
-    StereoI32(Box<super::Seek<Item=[i32; 2]> + Send>),
-    StereoU32(Box<super::Seek<Item=[u32; 2]> + Send>),
-    StereoI64(Box<super::Seek<Item=[i64; 2]> + Send>),
-    StereoU64(Box<super::Seek<Item=[u64; 2]> + Send>),
-    StereoF32(Box<super::Seek<Item=[f32; 2]> + Send>),
-    StereoF64(Box<super::Seek<Item=[f64; 2]> + Send>),
+    MonoI8(Box<super::Seek<Item = [i8; 1]> + Send>),
+    MonoU8(Box<super::Seek<Item = [u8; 1]> + Send>),
+    MonoI16(Box<super::Seek<Item = [i16; 1]> + Send>),
+    MonoU16(Box<super::Seek<Item = [u16; 1]> + Send>),
+    MonoI24(Box<super::Seek<Item = [I24; 1]> + Send>),
+    MonoU24(Box<super::Seek<Item = [U24; 1]> + Send>),
+    MonoI32(Box<super::Seek<Item = [i32; 1]> + Send>),
+    MonoU32(Box<super::Seek<Item = [u32; 1]> + Send>),
+    MonoI64(Box<super::Seek<Item = [i64; 1]> + Send>),
+    MonoU64(Box<super::Seek<Item = [u64; 1]> + Send>),
+    MonoF32(Box<super::Seek<Item = [f32; 1]> + Send>),
+    MonoF64(Box<super::Seek<Item = [f64; 1]> + Send>),
+    StereoI8(Box<super::Seek<Item = [i8; 2]> + Send>),
+    StereoU8(Box<super::Seek<Item = [u8; 2]> + Send>),
+    StereoI16(Box<super::Seek<Item = [i16; 2]> + Send>),
+    StereoU16(Box<super::Seek<Item = [u16; 2]> + Send>),
+    StereoI24(Box<super::Seek<Item = [I24; 2]> + Send>),
+    StereoU24(Box<super::Seek<Item = [U24; 2]> + Send>),
+    StereoI32(Box<super::Seek<Item = [i32; 2]> + Send>),
+    StereoU32(Box<super::Seek<Item = [u32; 2]> + Send>),
+    StereoI64(Box<super::Seek<Item = [i64; 2]> + Send>),
+    StereoU64(Box<super::Seek<Item = [u64; 2]> + Send>),
+    StereoF32(Box<super::Seek<Item = [f32; 2]> + Send>),
+    StereoF64(Box<super::Seek<Item = [f64; 2]> + Send>),
 }
 
 impl Seek {
@@ -307,14 +312,25 @@ impl Seek {
 }
 
 impl fmt::Debug for Seek {
-   fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-       write!(f, "Seek(channels={},bits={},fmt={:?},rate={}hz)", self.num_channels(), self.bits_per_sample(), self.format(), self.sample_rate())
-   }
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        write!(
+            f,
+            "Seek(channels={},bits={},fmt={:?},rate={}hz)",
+            self.num_channels(),
+            self.bits_per_sample(),
+            self.format(),
+            self.sample_rate()
+        )
+    }
 }
 
 impl<T> From<T> for Seek
-    where T: super::Seek<Item=[f64; 2]> + Send + 'static {
-    fn from(seek: T) -> Seek { Seek::StereoF64(Box::from(seek)) }
+where
+    T: super::Seek<Item = [f64; 2]> + Send + 'static,
+{
+    fn from(seek: T) -> Seek {
+        Seek::StereoF64(Box::from(seek))
+    }
 }
 
 impl From<Seek> for Source {
@@ -348,7 +364,6 @@ impl From<Seek> for Source {
     }
 }
 
-
 #[derive(Debug)]
 pub enum Audio {
     Source(Source),
@@ -379,11 +394,15 @@ impl Audio {
 }
 
 impl From<Source> for Audio {
-    fn from(source: Source) -> Audio { Audio::Source(source) }
+    fn from(source: Source) -> Audio {
+        Audio::Source(source)
+    }
 }
 
 impl From<Seek> for Audio {
-    fn from(seek: Seek) -> Audio { Audio::Seek(seek) }
+    fn from(seek: Seek) -> Audio {
+        Audio::Seek(seek)
+    }
 }
 
 impl From<Audio> for Source {

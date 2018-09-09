@@ -1,7 +1,7 @@
-use std::*;
-use std::io::{Read, Seek};
+use audio::*;
 use id3;
-use ::audio::*;
+use std::io::{Read, Seek};
+use std::*;
 
 pub mod flac;
 pub mod mp3;
@@ -26,7 +26,8 @@ pub fn detect_format(path: &path::Path) -> Result<Format, io::Error> {
         Ok(Format::Flac)
     } else if mp3::magic().is_match(&header) {
         // Not so fast, the ID3 header can also be slapped on a FLAC file!
-        if path.extension().map(|ext| ext.to_string_lossy()) == Some(borrow::Cow::Borrowed("flac")) {
+        if path.extension().map(|ext| ext.to_string_lossy()) == Some(borrow::Cow::Borrowed("flac"))
+        {
             Ok(Format::Flac)
         } else {
             Ok(Format::Mp3)
@@ -39,7 +40,9 @@ pub fn detect_format(path: &path::Path) -> Result<Format, io::Error> {
 }
 
 pub fn decode_metadata_file<P>(path: P) -> Result<Metadata, Error>
-    where P: AsRef<path::Path> {
+where
+    P: AsRef<path::Path>,
+{
     let p = path.as_ref();
     let file = fs::File::open(p)?;
     match detect_format(p)? {
@@ -51,7 +54,9 @@ pub fn decode_metadata_file<P>(path: P) -> Result<Metadata, Error>
 }
 
 pub fn decode_file<P>(path: P) -> Result<(dyn::Audio, Metadata), Error>
-    where P: AsRef<path::Path> {
+where
+    P: AsRef<path::Path>,
+{
     let p = path.as_ref();
     let file = fs::File::open(p)?;
     match detect_format(p)? {
@@ -62,13 +67,11 @@ pub fn decode_file<P>(path: P) -> Result<(dyn::Audio, Metadata), Error>
     }
 }
 
-
 pub struct Metadata {
     pub sample_rate: u32,
     pub num_samples: Option<u64>,
-    pub tag: Option<id3::Tag>
+    pub tag: Option<id3::Tag>,
 }
-
 
 #[derive(Debug, Error)]
 pub enum Error {

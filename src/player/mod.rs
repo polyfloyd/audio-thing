@@ -1,14 +1,13 @@
-use std::*;
+use audio::*;
+use library;
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, Weak};
-use ::audio::*;
-use ::library;
+use std::*;
 
 pub mod output;
 pub mod playback;
 pub use self::playback::*;
-
 
 /// A player manages the playback of audio from a list of audio. Multple tracks can be played at
 /// once to make mixing and crossfading possible.
@@ -20,14 +19,21 @@ pub use self::playback::*;
 pub struct Player {
     /// The tracks that are currently playing. When a track finishes or the playback is stopped
     /// manually, it will be removed from the map.
-    pub playing: BTreeMap<u64, (library::Audio, Playback, Option<Box<library::TrackInfo + Send>>)>,
+    pub playing: BTreeMap<
+        u64,
+        (
+            library::Audio,
+            Playback,
+            Option<Box<library::TrackInfo + Send>>,
+        ),
+    >,
     /// Used for generating the next playback key.
     gen_next_id: u64,
 
     output: Box<output::Output + Send>,
 
     pub queue: Vec<library::Audio>,
-    pub queue_autofill: Box<iter::Iterator<Item=library::Audio> + Send>,
+    pub queue_autofill: Box<iter::Iterator<Item = library::Audio> + Send>,
     pub queue_cursor: Option<usize>,
 
     pub libraries: Vec<Arc<library::Library>>,
@@ -37,7 +43,10 @@ pub struct Player {
 }
 
 impl Player {
-    pub fn new(output: Box<output::Output + Send>, libs: Vec<Arc<library::Library>>) -> Arc<Mutex<Player>> {
+    pub fn new(
+        output: Box<output::Output + Send>,
+        libs: Vec<Arc<library::Library>>,
+    ) -> Arc<Mutex<Player>> {
         let p = Arc::new(Mutex::new(Player {
             playing: BTreeMap::new(),
             gen_next_id: 0,
@@ -62,7 +71,10 @@ impl Player {
             library::Audio::Track(ref track) => track.audio()?.into(),
             library::Audio::Stream(ref stream) => {
                 let on_info = Arc::new(move |info| {
-                    let arc = match weak.upgrade() { Some(arc) => arc, None => return };
+                    let arc = match weak.upgrade() {
+                        Some(arc) => arc,
+                        None => return,
+                    };
                     thread::spawn(move || {
                         let mut player = arc.lock().unwrap();
                         if let Some(&mut (_, _, ref mut i)) = player.playing.get_mut(&id) {
@@ -71,37 +83,44 @@ impl Player {
                     });
                 });
                 stream.open(on_info)?.into()
-            },
+            }
         };
 
         let weak = self.weak_self.clone();
-        let playback = Playback::new(signal, &*self.output, Arc::new(move |event| {
-            let arc = match weak.upgrade() { Some(arc) => arc, None => return };
-            // Because mutations performed on the player may fire event that will in turn mutate
-            // the player, the handler is run asynchronously to prevent deadlocks.
-            thread::spawn(move || {
-                let mut player = arc.lock().unwrap();
-                match event {
-                    playback::Event::Output(output::Event::End) => {
-                        // Only advance the queue cursor if the track naturally ended.
-                        if let Err(err) = player.play_next_from_queue() {
+        let playback = Playback::new(
+            signal,
+            &*self.output,
+            Arc::new(move |event| {
+                let arc = match weak.upgrade() {
+                    Some(arc) => arc,
+                    None => return,
+                };
+                // Because mutations performed on the player may fire event that will in turn mutate
+                // the player, the handler is run asynchronously to prevent deadlocks.
+                thread::spawn(move || {
+                    let mut player = arc.lock().unwrap();
+                    match event {
+                        playback::Event::Output(output::Event::End) => {
+                            // Only advance the queue cursor if the track naturally ended.
+                            if let Err(err) = player.play_next_from_queue() {
+                                error!("{}", err);
+                                // TODO: (player.event_handers)(Event::Error(err));
+                            }
+                        }
+                        playback::Event::Output(output::Event::Error(err)) => {
                             error!("{}", err);
-                            // TODO: (player.event_handers)(Event::Error(err));
                         }
-                    },
-                    playback::Event::Output(output::Event::Error(err)) => {
-                        error!("{}", err);
-                    },
-                    playback::Event::State(state) => {
-                        // GC tracks that have been stopped.
-                        if state == State::Stopped {
-                            player.playing.remove(&id);
+                        playback::Event::State(state) => {
+                            // GC tracks that have been stopped.
+                            if state == State::Stopped {
+                                player.playing.remove(&id);
+                            }
                         }
-                    },
-                    _ => (),
-                }
-            });
-        }));
+                        _ => (),
+                    }
+                });
+            }),
+        );
         self.playing.insert(id, (audio.clone(), playback, None));
         Ok((id, &mut self.playing.get_mut(&id).unwrap().1))
     }
@@ -119,7 +138,8 @@ impl Player {
     }
 
     pub fn play_previous_from_queue(&mut self) -> Result<Option<(u64, &mut Playback)>, Error> {
-        let index = self.queue_cursor
+        let index = self
+            .queue_cursor
             .and_then(|i| i.checked_sub(1))
             .unwrap_or(0);
         self.play_from_queue(index)
@@ -131,9 +151,7 @@ impl Player {
     /// If the cursor has reached the end of the queue, a track from the queue autofill, if any, is
     /// appended and played.
     pub fn play_next_from_queue(&mut self) -> Result<Option<(u64, &mut Playback)>, Error> {
-        let index = self.queue_cursor
-            .map(|i| i + 1)
-            .unwrap_or(0);
+        let index = self.queue_cursor.map(|i| i + 1).unwrap_or(0);
         if index >= self.queue.len() {
             self.queue.extend(self.queue_autofill.next().into_iter());
         }
@@ -162,7 +180,11 @@ impl library::PlaylistMut for Player {
         Ok(())
     }
 
-    fn insert(&mut self, position: usize, audio: &[&library::Identity]) -> Result<(), Box<error::Error>> {
+    fn insert(
+        &mut self,
+        position: usize,
+        audio: &[&library::Identity],
+    ) -> Result<(), Box<error::Error>> {
         if position > self.queue.len() {
             return Err(Box::from(library::PlaylistError::IndexOutOfBounds));
         }
@@ -199,7 +221,8 @@ impl library::PlaylistMut for Player {
         }
         let new_queue = (0..from.len())
             .map(|i| {
-                self.queue.get(i)
+                self.queue
+                    .get(i)
                     .map(Clone::clone)
                     .ok_or(library::PlaylistError::IndexOutOfBounds)
             })
@@ -209,15 +232,12 @@ impl library::PlaylistMut for Player {
         }
 
         if let Some(cur) = self.queue_cursor.as_mut() {
-            *cur = *from.iter()
-                .find(|i| **i == *cur)
-                .unwrap();
+            *cur = *from.iter().find(|i| **i == *cur).unwrap();
         }
         self.queue = new_queue;
         Ok(())
     }
 }
-
 
 #[derive(Debug)]
 pub enum Error {
@@ -243,5 +263,7 @@ impl error::Error for Error {
 }
 
 impl From<Box<error::Error>> for Error {
-    fn from(err: Box<error::Error>) -> Error { Error::Other(err) }
+    fn from(err: Box<error::Error>) -> Error {
+        Error::Other(err)
+    }
 }

@@ -1,11 +1,10 @@
-use std::*;
-use byteorder::{ByteOrder, BigEndian, LittleEndian};
+use audio::*;
+use byteorder::{BigEndian, ByteOrder, LittleEndian};
+use format;
 use id3;
 use regex::bytes;
 use sample::{self, I24};
-use ::audio::*;
-use ::format;
-
+use std::*;
 
 pub fn magic() -> &'static bytes::Regex {
     lazy_static! {
@@ -13,7 +12,6 @@ pub fn magic() -> &'static bytes::Regex {
     }
     &MAGIC
 }
-
 
 #[derive(Copy, Clone, Debug)]
 pub enum Endianness {
@@ -27,13 +25,15 @@ enum Format {
     Float,
 }
 
-
 pub fn decode<R>(mut input: R) -> Result<(dyn::Audio, format::Metadata), Error>
-    where R: io::Read + io::Seek + Send + 'static {
+where
+    R: io::Read + io::Seek + Send + 'static,
+{
     // Read the file header.
     let mut file_header = [0; 12];
     input.read_exact(&mut file_header)?;
-    let endianness = magic().captures(&file_header)
+    let endianness = magic()
+        .captures(&file_header)
         .and_then(|cap| cap.get(1))
         .and_then(|m| match m.as_bytes() {
             b"F" => Some(Endianness::Little),
@@ -71,15 +71,15 @@ pub fn decode<R>(mut input: R) -> Result<(dyn::Audio, format::Metadata), Error>
                     block_align: LittleEndian::read_u16(&buf[12..14]),
                     sample_size: LittleEndian::read_u16(&buf[14..16]),
                 });
-            },
+            }
 
             b"id3 " => {
                 id3_tag = Some(id3::Tag::read_from(&mut input)?);
-            },
+            }
 
             b"data" => {
-                data_range = Some(sub_data_start .. sub_data_start + sub_size);
-            },
+                data_range = Some(sub_data_start..sub_data_start + sub_size);
+            }
 
             // Broadcast Audio Extension Chunk (BWF). Unimplemented.
             b"bext" => (),
@@ -100,7 +100,11 @@ pub fn decode<R>(mut input: R) -> Result<(dyn::Audio, format::Metadata), Error>
     let fmt = fmt.ok_or(Error::FormatError)?;
     let data_range = data_range.ok_or(Error::FormatError)?;
     if fmt.block_align != fmt.num_channels * fmt.sample_size / 8 {
-        error!("mismatch: block_align: {}, num_channels * sample_size: {}", fmt.block_align, fmt.num_channels * fmt.sample_size / 8);
+        error!(
+            "mismatch: block_align: {}, num_channels * sample_size: {}",
+            fmt.block_align,
+            fmt.num_channels * fmt.sample_size / 8
+        );
         return Err(Error::FormatError);
     }
     let audio_format = match fmt.audio_format {
@@ -110,11 +114,16 @@ pub fn decode<R>(mut input: R) -> Result<(dyn::Audio, format::Metadata), Error>
     };
     input.seek(io::SeekFrom::Start(data_range.start))?;
 
-    debug!("{} channels, {} bits, {} hz, endianness: {:?}", fmt.num_channels, fmt.sample_size, fmt.sample_rate, endianness);
+    debug!(
+        "{} channels, {} bits, {} hz, endianness: {:?}",
+        fmt.num_channels, fmt.sample_size, fmt.sample_rate, endianness
+    );
 
     let meta = format::Metadata {
         sample_rate: fmt.sample_rate,
-        num_samples: Some((data_range.end - data_range.start) / (fmt.num_channels * fmt.sample_size / 8) as u64),
+        num_samples: Some(
+            (data_range.end - data_range.start) / (fmt.num_channels * fmt.sample_size / 8) as u64,
+        ),
         tag: id3_tag,
     };
 
@@ -130,30 +139,45 @@ pub fn decode<R>(mut input: R) -> Result<(dyn::Audio, format::Metadata), Error>
                 ph_f: marker::PhantomData,
                 ph_b: marker::PhantomData,
             })).into()
-        }
+        };
     }
-    Ok((match (fmt.num_channels, fmt.sample_size, audio_format, endianness) {
-        (1, 8 , Format::Int,   Endianness::Little) => dyn_type!(dyn::Seek::MonoU8, LittleEndian),
-        (1, 16, Format::Int,   Endianness::Little) => dyn_type!(dyn::Seek::MonoI16, LittleEndian),
-        (1, 24, Format::Int,   Endianness::Little) => dyn_type!(dyn::Seek::MonoI24, LittleEndian),
-        (1, 32, Format::Float, Endianness::Little) => dyn_type!(dyn::Seek::MonoF32, LittleEndian),
-        (2, 8 , Format::Int,   Endianness::Little) => dyn_type!(dyn::Seek::StereoU8, LittleEndian),
-        (2, 16, Format::Int,   Endianness::Little) => dyn_type!(dyn::Seek::StereoI16, LittleEndian),
-        (2, 24, Format::Int,   Endianness::Little) => dyn_type!(dyn::Seek::StereoI24, LittleEndian),
-        (2, 32, Format::Float, Endianness::Little) => dyn_type!(dyn::Seek::StereoF32, LittleEndian),
-        (nc, ss, _, end) => return Err(Error::Unimplemented {
-            endianness: end,
-            num_channels: nc,
-            sample_size: ss,
-        }),
-    }, meta))
+    Ok((
+        match (fmt.num_channels, fmt.sample_size, audio_format, endianness) {
+            (1, 8, Format::Int, Endianness::Little) => dyn_type!(dyn::Seek::MonoU8, LittleEndian),
+            (1, 16, Format::Int, Endianness::Little) => dyn_type!(dyn::Seek::MonoI16, LittleEndian),
+            (1, 24, Format::Int, Endianness::Little) => dyn_type!(dyn::Seek::MonoI24, LittleEndian),
+            (1, 32, Format::Float, Endianness::Little) => {
+                dyn_type!(dyn::Seek::MonoF32, LittleEndian)
+            }
+            (2, 8, Format::Int, Endianness::Little) => dyn_type!(dyn::Seek::StereoU8, LittleEndian),
+            (2, 16, Format::Int, Endianness::Little) => {
+                dyn_type!(dyn::Seek::StereoI16, LittleEndian)
+            }
+            (2, 24, Format::Int, Endianness::Little) => {
+                dyn_type!(dyn::Seek::StereoI24, LittleEndian)
+            }
+            (2, 32, Format::Float, Endianness::Little) => {
+                dyn_type!(dyn::Seek::StereoF32, LittleEndian)
+            }
+            (nc, ss, _, end) => {
+                return Err(Error::Unimplemented {
+                    endianness: end,
+                    num_channels: nc,
+                    sample_size: ss,
+                })
+            }
+        },
+        meta,
+    ))
 }
 
 struct Decoder<R, F, B>
-    where R: io::Read + io::Seek,
-          F: sample::Frame,
-          F::Sample: DecodeSample<B>,
-          B: ByteOrder {
+where
+    R: io::Read + io::Seek,
+    F: sample::Frame,
+    F::Sample: DecodeSample<B>,
+    B: ByteOrder,
+{
     input: R,
     /// Position of the first PCM byte in the file.
     data_range: ops::Range<u64>,
@@ -169,10 +193,12 @@ struct Decoder<R, F, B>
 }
 
 impl<R, F, B> iter::Iterator for Decoder<R, F, B>
-    where R: io::Read + io::Seek,
-          F: sample::Frame,
-          F::Sample: DecodeSample<B>,
-          B: ByteOrder {
+where
+    R: io::Read + io::Seek,
+    F: sample::Frame,
+    F::Sample: DecodeSample<B>,
+    B: ByteOrder,
+{
     type Item = F;
     fn next(&mut self) -> Option<Self::Item> {
         let fpos = match self.input.seek(io::SeekFrom::Current(0)) {
@@ -180,7 +206,7 @@ impl<R, F, B> iter::Iterator for Decoder<R, F, B>
             Err(err) => {
                 error!("error getting position: {}", err);
                 return None;
-            },
+            }
         };
         if fpos < self.data_range.start || self.data_range.end <= fpos {
             return None;
@@ -190,15 +216,16 @@ impl<R, F, B> iter::Iterator for Decoder<R, F, B>
         match self.input.read(&mut buf) {
             Ok(nread) if nread != buf.len() => {
                 return None;
-            },
+            }
             Err(err) => {
                 error!("error reading sample: {}", err);
                 return None;
-            },
+            }
             _ => (),
         };
 
-        self.next_sample = (fpos - self.data_range.start) / (self.num_channels * self.bytes_per_sample) as u64 + 1;
+        self.next_sample =
+            (fpos - self.data_range.start) / (self.num_channels * self.bytes_per_sample) as u64 + 1;
 
         Some(F::from_fn(|channel| {
             let offset = channel * self.bytes_per_sample;
@@ -208,31 +235,36 @@ impl<R, F, B> iter::Iterator for Decoder<R, F, B>
 }
 
 impl<R, F, B> Source for Decoder<R, F, B>
-    where R: io::Read + io::Seek,
-          F: sample::Frame,
-          F::Sample: DecodeSample<B>,
-          B: ByteOrder {
+where
+    R: io::Read + io::Seek,
+    F: sample::Frame,
+    F::Sample: DecodeSample<B>,
+    B: ByteOrder,
+{
     fn sample_rate(&self) -> u32 {
         self.sample_rate
     }
 }
 
-
 impl<R, F, B> Seekable for Decoder<R, F, B>
-    where R: io::Read + io::Seek,
-          F: sample::Frame,
-          F::Sample: DecodeSample<B>,
-          B: ByteOrder {
+where
+    R: io::Read + io::Seek,
+    F: sample::Frame,
+    F::Sample: DecodeSample<B>,
+    B: ByteOrder,
+{
     fn seek(&mut self, position: u64) -> Result<(), SeekError> {
         if position >= self.length() {
-            return Err(SeekError::OutofRange{
+            return Err(SeekError::OutofRange {
                 pos: position,
                 size: self.length(),
             });
         }
 
-        let fpos = self.data_range.start + position * (self.num_channels * self.bytes_per_sample) as u64;
-        self.input.seek(io::SeekFrom::Start(fpos))
+        let fpos =
+            self.data_range.start + position * (self.num_channels * self.bytes_per_sample) as u64;
+        self.input
+            .seek(io::SeekFrom::Start(fpos))
             .map_err(|err| SeekError::Other(Box::from(err)))?;
         self.next_sample = position;
         Ok(())
@@ -249,25 +281,36 @@ impl<R, F, B> Seekable for Decoder<R, F, B>
 }
 
 impl<R, F, B> Seek for Decoder<R, F, B>
-    where R: io::Read + io::Seek,
-          F: sample::Frame,
-          F::Sample: DecodeSample<B>,
-          B: ByteOrder { }
-
+where
+    R: io::Read + io::Seek,
+    F: sample::Frame,
+    F::Sample: DecodeSample<B>,
+    B: ByteOrder,
+{}
 
 trait DecodeSample<B>: sample::Sample
-    where B: ByteOrder {
+where
+    B: ByteOrder,
+{
     fn decode(buf: &[u8]) -> Self;
 }
 
 impl<B> DecodeSample<B> for u8
-    where B: ByteOrder {
-    fn decode(buf: &[u8]) -> u8 { buf[0] }
+where
+    B: ByteOrder,
+{
+    fn decode(buf: &[u8]) -> u8 {
+        buf[0]
+    }
 }
 
 impl<B> DecodeSample<B> for i16
-    where B: ByteOrder {
-    fn decode(buf: &[u8]) -> i16 { B::read_i16(buf) }
+where
+    B: ByteOrder,
+{
+    fn decode(buf: &[u8]) -> i16 {
+        B::read_i16(buf)
+    }
 }
 
 impl DecodeSample<BigEndian> for I24 {
@@ -283,17 +326,20 @@ impl DecodeSample<LittleEndian> for I24 {
 }
 
 impl<B> DecodeSample<B> for f32
-    where B: ByteOrder {
-    fn decode(buf: &[u8]) -> f32 { B::read_f32(buf) }
+where
+    B: ByteOrder,
+{
+    fn decode(buf: &[u8]) -> f32 {
+        B::read_f32(buf)
+    }
 }
-
 
 #[derive(Debug)]
 pub enum Error {
     IO(io::Error),
     ID3(id3::Error),
     FormatError,
-    Unimplemented{
+    Unimplemented {
         endianness: Endianness,
         num_channels: u16,
         sample_size: u16,
@@ -304,26 +350,19 @@ pub enum Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            Error::IO(ref err) => {
-                write!(f, "IO: {}", err)
-            },
-            Error::ID3(ref err) => {
-                write!(f, "ID3: {}", err)
-            },
-            Error::FormatError => {
-                write!(f, "Format error")
-            },
-            Error::Unimplemented{ endianness, num_channels, sample_size } => {
-                write!(f,
-                    "Wave format not implemented: {} channels, {} bits, endianness: {:?}",
-                    num_channels,
-                    sample_size,
-                    endianness,
-                )
-            },
-            Error::Unsupported => {
-                write!(f, "Non PCM formats are unsupported")
-            },
+            Error::IO(ref err) => write!(f, "IO: {}", err),
+            Error::ID3(ref err) => write!(f, "ID3: {}", err),
+            Error::FormatError => write!(f, "Format error"),
+            Error::Unimplemented {
+                endianness,
+                num_channels,
+                sample_size,
+            } => write!(
+                f,
+                "Wave format not implemented: {} channels, {} bits, endianness: {:?}",
+                num_channels, sample_size, endianness,
+            ),
+            Error::Unsupported => write!(f, "Non PCM formats are unsupported"),
         }
     }
 }
@@ -354,7 +393,6 @@ impl From<id3::Error> for Error {
     }
 }
 
-
 #[cfg(all(test, feature = "unstable"))]
 mod benchmarks {
     extern crate test;
@@ -362,9 +400,9 @@ mod benchmarks {
 
     #[bench]
     fn read_metadata(b: &mut test::Bencher) {
-         b.iter(|| {
-             let file = fs::File::open("testdata/10s_440hz_i16.wav").unwrap();
-             decode(file).unwrap();
-         });
+        b.iter(|| {
+            let file = fs::File::open("testdata/10s_440hz_i16.wav").unwrap();
+            decode(file).unwrap();
+        });
     }
 }

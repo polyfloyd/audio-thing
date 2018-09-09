@@ -1,9 +1,8 @@
-use std::*;
+use audio::*;
 use std::sync::Arc;
-use ::audio::*;
+use std::*;
 
 pub mod pulse;
-
 
 #[derive(Debug)]
 pub enum Event {
@@ -14,13 +13,16 @@ pub enum Event {
     Error(Box<error::Error + Send>),
 }
 
-
 pub trait Output: Send {
     /// Starts playing audio from the specified source.
     /// This method may be called multiple times during the lifetime of the output to allow playing
     /// and mixing multiple streams at once.
     /// The implementation should take into account that the source may block at any given moment.
-    fn consume(&self, source: dyn::Source, event_handler: Arc<Fn(Event) + Send + Sync>) -> Result<Box<Stream>, Box<error::Error>>;
+    fn consume(
+        &self,
+        source: dyn::Source,
+        event_handler: Arc<Fn(Event) + Send + Sync>,
+    ) -> Result<Box<Stream>, Box<error::Error>>;
 }
 
 pub trait Stream: Send {

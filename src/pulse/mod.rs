@@ -1,12 +1,11 @@
-use std::*;
-use std::io::{Read, Write};
+use audio;
 use libpulse_sys::*;
 use sample;
-use ::audio;
+use std::io::{Read, Write};
+use std::*;
 
 pub mod simple;
 pub use self::simple::*;
-
 
 pub struct Source<F: sample::Frame> {
     conn: Connection<F>,
@@ -14,20 +13,30 @@ pub struct Source<F: sample::Frame> {
 }
 
 impl<F> Source<F>
-    where F: sample::Frame {
+where
+    F: sample::Frame,
+{
     pub fn connection(&self) -> &Connection<F> {
         &self.conn
     }
 }
 
 impl<F> iter::Iterator for Source<F>
-    where F: sample::Frame {
+where
+    F: sample::Frame,
+{
     type Item = F;
     fn next(&mut self) -> Option<Self::Item> {
         unsafe {
-            debug_assert_eq!(mem::size_of::<F>(), F::n_channels() * mem::size_of::<F::Sample>());
+            debug_assert_eq!(
+                mem::size_of::<F>(),
+                F::n_channels() * mem::size_of::<F::Sample>()
+            );
             let mut frame: F = mem::uninitialized();
-            let buf = slice::from_raw_parts_mut(mem::transmute::<&F, *mut u8>(&mut frame), mem::size_of::<F>());
+            let buf = slice::from_raw_parts_mut(
+                mem::transmute::<&F, *mut u8>(&mut frame),
+                mem::size_of::<F>(),
+            );
             self.conn.read(buf).unwrap();
             Some(frame)
         }
@@ -35,17 +44,28 @@ impl<F> iter::Iterator for Source<F>
 }
 
 impl<F> audio::Source for Source<F>
-    where F: sample::Frame {
+where
+    F: sample::Frame,
+{
     fn sample_rate(&self) -> u32 {
         self.rate
     }
 }
 
 pub fn source<F, S>(app_name: &str, rate: u32) -> Result<Source<F>, Box<error::Error>>
-    where F: sample::Frame<Sample=S>,
-          S: sample::Sample + AsSampleFormat {
-    Connection::new(app_name, "source", rate, pa_stream_direction::PA_STREAM_RECORD)
-        .map(|c| Source { conn: c, rate: rate })
+where
+    F: sample::Frame<Sample = S>,
+    S: sample::Sample + AsSampleFormat,
+{
+    Connection::new(
+        app_name,
+        "source",
+        rate,
+        pa_stream_direction::PA_STREAM_RECORD,
+    ).map(|c| Source {
+        conn: c,
+        rate: rate,
+    })
 }
 
 pub struct Sink<F: sample::Frame> {
@@ -54,18 +74,26 @@ pub struct Sink<F: sample::Frame> {
 }
 
 impl<F> Sink<F>
-    where F: sample::Frame {
+where
+    F: sample::Frame,
+{
     pub fn connection(&self) -> &Connection<F> {
         self.conn.get_ref()
     }
 }
 
 impl<F> audio::Sink<F> for Sink<F>
-    where F: sample::Frame {
+where
+    F: sample::Frame,
+{
     fn write_frame(&mut self, frame: F) -> Result<(), Box<error::Error + Send>> {
         unsafe {
-            debug_assert_eq!(mem::size_of::<F>(), F::n_channels() * mem::size_of::<F::Sample>());
-            let buf = slice::from_raw_parts(mem::transmute::<&F, *const u8>(&frame), mem::size_of::<F>());
+            debug_assert_eq!(
+                mem::size_of::<F>(),
+                F::n_channels() * mem::size_of::<F::Sample>()
+            );
+            let buf =
+                slice::from_raw_parts(mem::transmute::<&F, *const u8>(&frame), mem::size_of::<F>());
             match self.conn.write(buf) {
                 // From<T> does not work well with T + Send :(
                 Ok(_) => (),
@@ -81,19 +109,29 @@ impl<F> audio::Sink<F> for Sink<F>
 }
 
 impl<F> Drop for Sink<F>
-    where F: sample::Frame {
+where
+    F: sample::Frame,
+{
     fn drop(&mut self) {
         let _ = self.conn.get_ref().drain();
     }
 }
 
 pub fn sink<F>(app_name: &str, stream_name: &str, rate: u32) -> Result<Sink<F>, Box<error::Error>>
-    where F: sample::Frame,
-          F::Sample: sample::Sample + AsSampleFormat {
-    Connection::new(app_name, stream_name, rate, pa_stream_direction::PA_STREAM_PLAYBACK)
-        .map(|c| Sink { conn: io::BufWriter::new(c), rate: rate })
+where
+    F: sample::Frame,
+    F::Sample: sample::Sample + AsSampleFormat,
+{
+    Connection::new(
+        app_name,
+        stream_name,
+        rate,
+        pa_stream_direction::PA_STREAM_PLAYBACK,
+    ).map(|c| Sink {
+        conn: io::BufWriter::new(c),
+        rate: rate,
+    })
 }
-
 
 #[derive(Debug)]
 pub struct PulseError(pa_error_code);

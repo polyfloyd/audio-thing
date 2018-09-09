@@ -1,8 +1,10 @@
+use filter::stft;
 use std::*;
-use ::filter::stft;
 
 pub struct PhaseVocoder<S>
-    where S: stft::Stft {
+where
+    S: stft::Stft,
+{
     pub ratio: sync::Arc<sync::Mutex<f64>>,
 
     input: S,
@@ -12,7 +14,9 @@ pub struct PhaseVocoder<S>
 }
 
 impl<S> iter::Iterator for PhaseVocoder<S>
-    where S: stft::Stft {
+where
+    S: stft::Stft,
+{
     type Item = S::Item;
     fn next(&mut self) -> Option<Self::Item> {
         assert!(0.0 <= self.consumption && self.consumption < 1.0);
@@ -23,7 +27,8 @@ impl<S> iter::Iterator for PhaseVocoder<S>
         // The ratio is also the number of blocks that we should use.
         let next_consumption = self.consumption + *ratio;
 
-        self.accum.extend(self.input.by_ref().take(next_consumption.ceil() as usize));
+        self.accum
+            .extend(self.input.by_ref().take(next_consumption.ceil() as usize));
 
         let block_index = (next_consumption / 2.0).floor() as usize;
         if block_index >= self.accum.len() {
@@ -34,7 +39,8 @@ impl<S> iter::Iterator for PhaseVocoder<S>
 
         // Remove the blocks that have been fully consumed.
         let num_blocks_available = self.accum.len();
-        self.accum.drain(0..cmp::min(next_consumption.floor() as usize, num_blocks_available));
+        self.accum
+            .drain(0..cmp::min(next_consumption.floor() as usize, num_blocks_available));
         self.consumption = next_consumption % 1.0;
 
         Some(output_block)
@@ -42,7 +48,9 @@ impl<S> iter::Iterator for PhaseVocoder<S>
 }
 
 impl<S> stft::Stft for PhaseVocoder<S>
-    where S: stft::Stft {
+where
+    S: stft::Stft,
+{
     type NumChannels = S::NumChannels;
     fn sample_rate(&self) -> u32 {
         self.input.sample_rate()
@@ -69,5 +77,4 @@ pub trait AdjustTempo: stft::Stft + Sized {
     }
 }
 
-impl<T> AdjustTempo for T
-    where T: stft::Stft { }
+impl<T> AdjustTempo for T where T: stft::Stft {}

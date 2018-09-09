@@ -1,17 +1,16 @@
-use std::*;
+use format;
+use library::{self, Library, Track, TrackInfo};
+use notify::{self, Watcher};
+use rusqlite as sqlite;
 use std::borrow::Cow;
 use std::hash::{Hash, Hasher};
 use std::sync::mpsc;
-use notify::{self, Watcher};
-use rusqlite as sqlite;
+use std::*;
 use xdg;
-use ::format;
-use ::library::{self, Library, Track, TrackInfo};
 
 mod playlist;
 mod track;
 use self::track::*;
-
 
 pub struct Filesystem {
     root: path::PathBuf,
@@ -33,10 +32,14 @@ impl Filesystem {
             database_schema.hash(&mut s);
             (s.finish() % u32::MAX as u64) as i64
         };
-        let db_version = db.prepare("PRAGMA user_version")?
+        let db_version = db
+            .prepare("PRAGMA user_version")?
             .query_row(&[], |row| row.get::<_, i64>(0))?;
 
-        debug!("db schema versions: current={}, wanted={}", db_version, wanted_version);
+        debug!(
+            "db schema versions: current={}, wanted={}",
+            db_version, wanted_version
+        );
         let mut db = if db_version != wanted_version {
             drop(db);
             debug!("(re)initializing filesystem db");
@@ -58,7 +61,10 @@ impl Filesystem {
     fn with_db(db: sqlite::Connection, root: &path::Path) -> Result<Filesystem, Error> {
         let root = root.canonicalize()?;
         assert!(root.is_absolute());
-        debug!("Initializing filesystem with root: {}", root.to_string_lossy());
+        debug!(
+            "Initializing filesystem with root: {}",
+            root.to_string_lossy()
+        );
         let fs = Filesystem {
             root: root,
             db: sync::Arc::new(sync::Mutex::new(db)),
@@ -84,8 +90,11 @@ impl Filesystem {
             }
 
             let (tx, rx) = mpsc::channel();
-            let mut watcher: notify::RecommendedWatcher = notify::Watcher::new(tx, time::Duration::from_secs(30)).unwrap();
-            watcher.watch(root, notify::RecursiveMode::Recursive).unwrap();
+            let mut watcher: notify::RecommendedWatcher =
+                notify::Watcher::new(tx, time::Duration::from_secs(30)).unwrap();
+            watcher
+                .watch(root, notify::RecursiveMode::Recursive)
+                .unwrap();
 
             for event in rx.into_iter() {
                 macro_rules! with_db {
@@ -99,48 +108,38 @@ impl Filesystem {
                             Ok(_) => (),
                             Err(err) => {
                                 error!("{}", err);
-                            },
+                            }
                         }
-                    }}
+                    }};
                 }
                 match event {
                     notify::DebouncedEvent::Create(path) => {
-                        with_db!(|db: &mut sqlite::Connection| {
-                            path.canonicalize()
-                                .map_err(|err| err.into())
-                                .and_then(|path| {
-                                    add_to_index(db, &path)
-                                })
-                        });
-                    },
+                        with_db!(|db: &mut sqlite::Connection| path
+                            .canonicalize()
+                            .map_err(|err| err.into())
+                            .and_then(|path| add_to_index(db, &path)));
+                    }
                     notify::DebouncedEvent::Write(path) => {
-                        with_db!(|db: &mut sqlite::Connection| {
-                            path.canonicalize()
-                                .map_err(|err| err.into())
-                                .and_then(|path| {
-                                    add_to_index(db, &path)
-                                })
-                        });
-                    },
+                        with_db!(|db: &mut sqlite::Connection| path
+                            .canonicalize()
+                            .map_err(|err| err.into())
+                            .and_then(|path| add_to_index(db, &path)));
+                    }
                     notify::DebouncedEvent::Chmod(path) => {
-                        with_db!(|db: &mut sqlite::Connection| {
-                            path.canonicalize()
-                                .map_err(|err| err.into())
-                                .and_then(|path| {
-                                    add_to_index(db, &path)?;
-                                    track_clean_recursive(db, &path)
-                                })
-                        });
-                    },
+                        with_db!(|db: &mut sqlite::Connection| path
+                            .canonicalize()
+                            .map_err(|err| err.into())
+                            .and_then(|path| {
+                                add_to_index(db, &path)?;
+                                track_clean_recursive(db, &path)
+                            }));
+                    }
                     notify::DebouncedEvent::Remove(path) => {
-                        with_db!(|db: &mut sqlite::Connection| {
-                            path.canonicalize()
-                                .map_err(|err| err.into())
-                                .and_then(|path| {
-                                    track_clean_recursive(db, &path)
-                                })
-                        });
-                    },
+                        with_db!(|db: &mut sqlite::Connection| path
+                            .canonicalize()
+                            .map_err(|err| err.into())
+                            .and_then(|path| track_clean_recursive(db, &path)));
+                    }
                     notify::DebouncedEvent::Rename(src, dest) => {
                         with_db!(|db: &mut sqlite::Connection| {
                             src.canonicalize()
@@ -150,30 +149,32 @@ impl Filesystem {
                                 .map_err(|err| err.into())
                                 .and_then(|path| add_to_index(db, &path))
                         });
-                    },
+                    }
                     notify::DebouncedEvent::NoticeWrite(_) => (),
                     notify::DebouncedEvent::NoticeRemove(_) => (),
                     notify::DebouncedEvent::Rescan => (),
                     notify::DebouncedEvent::Error(_, _) => (),
                 }
             }
-
         });
 
         Ok(fs)
     }
 
     /// TODO: This function will be removed in the future when the search API is finished.
-    pub fn track_by_path(&self, path: &path::Path) -> Result<Option<sync::Arc<Track>>, Box<error::Error>> {
+    pub fn track_by_path(
+        &self,
+        path: &path::Path,
+    ) -> Result<Option<sync::Arc<Track>>, Box<error::Error>> {
         let path = if path.is_absolute() {
             path.canonicalize()?
         } else {
             self.root.join(path).canonicalize()?
         };
-        let id = path.to_str()
+        let id = path
+            .to_str()
             .ok_or_else(|| Error::BadPath(path.to_path_buf()))?;
-        let track = self.tracks()?
-            .find(|track| track.id().1 == id);
+        let track = self.tracks()?.find(|track| track.id().1 == id);
         Ok(track)
     }
 }
@@ -183,7 +184,10 @@ impl library::Library for Filesystem {
         Cow::Borrowed("fs")
     }
 
-    fn find_by_id(&self, id: &library::Identity) -> Result<Option<library::Audio>, Box<error::Error>> {
+    fn find_by_id(
+        &self,
+        id: &library::Identity,
+    ) -> Result<Option<library::Audio>, Box<error::Error>> {
         let (lib, id) = id.id();
         if lib == self.name() {
             unimplemented!();
@@ -192,19 +196,27 @@ impl library::Library for Filesystem {
         Ok(track.map(library::Audio::Track))
     }
 
-    fn tracks(&self) -> Result<Box<iter::Iterator<Item=sync::Arc<library::Track>>>, Box<error::Error>> {
+    fn tracks(
+        &self,
+    ) -> Result<Box<iter::Iterator<Item = sync::Arc<library::Track>>>, Box<error::Error>> {
         let db = self.db.lock().unwrap();
-        let mut stmt_tracks = db.prepare(r#"
+        let mut stmt_tracks = db.prepare(
+            r#"
            SELECT * FROM "track"
-        "#)?;
-        let mut stmt_artists = db.prepare(r#"
+        "#,
+        )?;
+        let mut stmt_artists = db.prepare(
+            r#"
            SELECT "name", "type" FROM "track_artist"
            WHERE "track_path" = ?1
-        "#)?;
-        let mut stmt_genres = db.prepare(r#"
+        "#,
+        )?;
+        let mut stmt_genres = db.prepare(
+            r#"
            SELECT "genre" FROM "track_genre"
            WHERE "track_path" = ?1
-        "#)?;
+        "#,
+        )?;
         let tracks: Result<Vec<_>, Box<error::Error>> = stmt_tracks
             .query_and_then(&[], |row| {
                 let mut track = RawTrack {
@@ -223,7 +235,8 @@ impl library::Library for Filesystem {
                     rating: row.get("rating"),
                     release: row.get("release"),
                 };
-                let artists = stmt_artists.query_map(&[&track.path], |row| (row.get("name"), row.get("type")))?;
+                let artists = stmt_artists
+                    .query_map(&[&track.path], |row| (row.get("name"), row.get("type")))?;
                 for artist in artists {
                     let (name, typ): (_, Option<String>) = artist?;
                     match typ.as_ref().map(|s| s.as_str()) {
@@ -239,7 +252,9 @@ impl library::Library for Filesystem {
                 Ok(track)
             })?
             .collect(); // TODO: Stream results instead of collecting.
-        Ok(Box::from(tracks?.into_iter().map(|t| -> sync::Arc<library::Track> { sync::Arc::new(t) })))
+        Ok(Box::from(tracks?.into_iter().map(
+            |t| -> sync::Arc<library::Track> { sync::Arc::new(t) },
+        )))
     }
 }
 
@@ -251,7 +266,6 @@ pub fn track_from_path(path: &path::Path) -> Result<sync::Arc<Track>, Error> {
         meta: metadata,
     }))
 }
-
 
 /// Attempts to recursively add or update a file or directory to the index.
 fn add_to_index(db: &mut sqlite::Connection, path: &path::Path) -> Result<(), Error> {
@@ -271,21 +285,27 @@ fn add_to_index(db: &mut sqlite::Connection, path: &path::Path) -> Result<(), Er
         }
         return Ok(());
     }
-    fn track_add(db: &mut sqlite::Connection, path: &path::Path, metadata: &fs::Metadata) -> Result<(), Error> {
+    fn track_add(
+        db: &mut sqlite::Connection,
+        path: &path::Path,
+        metadata: &fs::Metadata,
+    ) -> Result<(), Error> {
         assert!(metadata.is_file());
 
         // Check whether the index is outdated by comparing the timestamp of the file with the one
         // in the database.
         let mtime = Timestamp(metadata.modified()?);
-        let path_str = path.to_str()
-            .ok_or(Error::BadPath(path.to_path_buf()))?;
-        let up_to_date = db.query_row(r#"
+        let path_str = path.to_str().ok_or(Error::BadPath(path.to_path_buf()))?;
+        let up_to_date = db.query_row(
+            r#"
             SELECT COUNT(*) AS "num" FROM "track"
             WHERE "path" = ?1
             AND "modified_at" = ?2
             LIMIT 1
-        "#, &[
-            &path_str, &mtime], |row| row.get::<_, bool>("num"))?;
+        "#,
+            &[&path_str, &mtime],
+            |row| row.get::<_, bool>("num"),
+        )?;
         if up_to_date {
             debug!("skipping (up to date): {}", path.to_string_lossy());
             return Ok(());
@@ -297,11 +317,11 @@ fn add_to_index(db: &mut sqlite::Connection, path: &path::Path) -> Result<(), Er
                 // Not an audio file.
                 debug!("skipping (unsupported): {}", path.to_string_lossy());
                 return Ok(());
-            },
+            }
             Err(err) => {
                 error!("skipping ({}): {}", err, path.to_string_lossy());
                 return Ok(());
-            },
+            }
         };
         if metadata.num_samples.is_none() {
             // A stream or a track without a known length.
@@ -328,9 +348,14 @@ fn add_to_index(db: &mut sqlite::Connection, path: &path::Path) -> Result<(), Er
 }
 
 fn track_upsert<P>(db: &mut sqlite::Connection, track: &MetadataTrack<P>) -> Result<(), Error>
-    where P: AsRef<path::Path> + Send + Sync {
+where
+    P: AsRef<path::Path> + Send + Sync,
+{
     let tx = db.transaction()?;
-    let path = track.path.as_ref().to_str()
+    let path = track
+        .path
+        .as_ref()
+        .to_str()
         .ok_or(Error::BadPath(track.path.as_ref().to_path_buf()))?;
     tx.execute(r#"
         INSERT INTO "track"
@@ -350,74 +375,88 @@ fn track_upsert<P>(db: &mut sqlite::Connection, track: &MetadataTrack<P>) -> Res
         &track.album_disc(),
         &track.album_track(),
     ])?;
-    tx.execute(r#"
+    tx.execute(
+        r#"
         DELETE FROM "track_artist"
         WHERE "track_path" = ?1;
-    "#, &[ &path ])?;
+    "#,
+        &[&path],
+    )?;
 
     let ar = track.artists();
     let rx = track.remixers();
     let aa = track.album_artists();
-    let artists = ar.iter().map(|name| (name, None))
+    let artists = ar
+        .iter()
+        .map(|name| (name, None))
         .chain(rx.iter().map(|name| (name, Some("remixer"))))
         .chain(aa.iter().map(|name| (name, Some("album"))));
     for (name, typ) in artists {
-        tx.execute(r#"
+        tx.execute(
+            r#"
             INSERT INTO "track_artist"
             ("track_path", "name", "type")
             VALUES (?1, ?2, ?3)
-        "#, &[ &path, name, &typ ])?;
+        "#,
+            &[&path, name, &typ],
+        )?;
     }
     for genre in track.genres().iter() {
-        tx.execute(r#"
+        tx.execute(
+            r#"
             INSERT INTO "track_genre"
             ("track_path", "genre")
             VALUES (?1, ?2)
-        "#, &[ &path, genre ])?;
+        "#,
+            &[&path, genre],
+        )?;
     }
     tx.commit()?;
     Ok(())
 }
 
 fn track_clean_recursive(db: &sqlite::Connection, path: &path::Path) -> Result<(), Error> {
-    let path_str = path.to_str()
+    let path_str = path
+        .to_str()
         .ok_or(Error::BadPath(path.to_path_buf()))?
         .to_string();
-    db.execute(r#"
+    db.execute(
+        r#"
         DELETE FROM "track"
         WHERE "path" LIKE ?1 AND NOT file_exists("path")
-    "#, &[ &(path_str + "%") ])?;
+    "#,
+        &[&(path_str + "%")],
+    )?;
     Ok(())
 }
-
 
 fn init_db_functions(db: &mut sqlite::Connection) -> Result<(), Error> {
     db.create_scalar_function("file_exists", 1, false, |ctx| {
         let path = ctx.get::<String>(0)?;
         fs::metadata(path)
             .map(|meta| meta.is_file())
-            .or_else(|err| {
-                match err.kind() {
-                    io::ErrorKind::NotFound|io::ErrorKind::PermissionDenied => Ok(false),
-                    _ => Err(sqlite::Error::UserFunctionError(Box::new(err)))
-                }
+            .or_else(|err| match err.kind() {
+                io::ErrorKind::NotFound | io::ErrorKind::PermissionDenied => Ok(false),
+                _ => Err(sqlite::Error::UserFunctionError(Box::new(err))),
             })
     })?;
     Ok(())
 }
 
-
 struct Timestamp(time::SystemTime);
 
 impl sqlite::types::ToSql for Timestamp {
     fn to_sql(&self) -> Result<sqlite::types::ToSqlOutput, sqlite::Error> {
-        let secs = self.0.duration_since(time::UNIX_EPOCH)
+        let secs = self
+            .0
+            .duration_since(time::UNIX_EPOCH)
             .map_err(|err| sqlite::Error::UserFunctionError(Box::from(err)))?
             .as_secs();
-        Ok(sqlite::types::ToSqlOutput::Owned(sqlite::types::Value::Integer(secs as i64)))
+        Ok(sqlite::types::ToSqlOutput::Owned(
+            sqlite::types::Value::Integer(secs as i64),
+        ))
     }
 }
-
 
 #[derive(Debug)]
 pub enum Error {
@@ -433,27 +472,17 @@ pub enum Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            Error::Format(ref err) =>  {
-                write!(f, "Format: {}", err)
-            },
-            Error::IO(ref err) =>  {
-                write!(f, "IO: {}", err)
-            },
-            Error::Sqlite(ref err) =>  {
-                write!(f, "Sqlite: {}", err)
-            },
-            Error::Xdg(ref err) => {
-                write!(f, "Xdg: {}", err)
-            },
-            Error::BadPath(ref path) => {
-                write!(f, "The path {} could not be converted to a string", path.to_string_lossy())
-            },
-            Error::NonSeek => {
-                write!(f, "Attempted to open a track that does not support seeking")
-            },
-            Error::Unspecified => {
-                write!(f, "Unspecified")
-            },
+            Error::Format(ref err) => write!(f, "Format: {}", err),
+            Error::IO(ref err) => write!(f, "IO: {}", err),
+            Error::Sqlite(ref err) => write!(f, "Sqlite: {}", err),
+            Error::Xdg(ref err) => write!(f, "Xdg: {}", err),
+            Error::BadPath(ref path) => write!(
+                f,
+                "The path {} could not be converted to a string",
+                path.to_string_lossy()
+            ),
+            Error::NonSeek => write!(f, "Attempted to open a track that does not support seeking"),
+            Error::Unspecified => write!(f, "Unspecified"),
         }
     }
 }
@@ -493,15 +522,16 @@ impl From<sqlite::Error> for Error {
 }
 
 impl From<xdg::BaseDirectoriesError> for Error {
-    fn from(err: xdg::BaseDirectoriesError) -> Error { Error::Xdg(err) }
+    fn from(err: xdg::BaseDirectoriesError) -> Error {
+        Error::Xdg(err)
+    }
 }
-
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::{Arc, Mutex};
     use library::{Library, Playlist};
+    use std::sync::{Arc, Mutex};
 
     const ALBUM: &'static str = "testdata/Various Artists - Dark Sine of the Moon";
 
@@ -523,11 +553,20 @@ mod tests {
         let mut db = sqlite::Connection::open_in_memory().unwrap();
         init_db_functions(&mut db).unwrap();
         let file = "testdata/Various Artists - Dark Sine of the Moon/01 - The B-Trees - Lucy in the Cloud with Sine Waves.flac";
-        let exists = db.query_row("SELECT file_exists(?1)", &[&file], |row| row.get::<_, bool>(0)).unwrap();
+        let exists =
+            db.query_row("SELECT file_exists(?1)", &[&file], |row| {
+                row.get::<_, bool>(0)
+            }).unwrap();
         assert!(exists);
-        let non_existing = db.query_row("SELECT file_exists('non_existing.file')", &[], |row| row.get::<_, bool>(0)).unwrap();
+        let non_existing =
+            db.query_row("SELECT file_exists('non_existing.file')", &[], |row| {
+                row.get::<_, bool>(0)
+            }).unwrap();
         assert!(!non_existing);
-        let not_a_file = db.query_row("SELECT file_exists('testdata')", &[], |row| row.get::<_, bool>(0)).unwrap();
+        let not_a_file =
+            db.query_row("SELECT file_exists('testdata')", &[], |row| {
+                row.get::<_, bool>(0)
+            }).unwrap();
         assert!(!not_a_file);
     }
 
@@ -536,7 +575,9 @@ mod tests {
         let fs = Filesystem::with_db(db(), path::Path::new(ALBUM)).unwrap();
         thread::sleep(time::Duration::from_secs(1)); // Await initial scan.
         let db = fs.db.lock().unwrap();
-        let num_tracks = db.query_row("SELECT COUNT(*) FROM \"track\"", &[], |row| row.get(0)).unwrap();
+        let num_tracks = db
+            .query_row("SELECT COUNT(*) FROM \"track\"", &[], |row| row.get(0))
+            .unwrap();
         assert_eq!(3, num_tracks);
     }
 
@@ -545,7 +586,9 @@ mod tests {
         let fs = Filesystem::with_db(db(), path::Path::new(ALBUM)).unwrap();
         thread::sleep(time::Duration::from_secs(1)); // Await initial scan.
         let db = fs.db.lock().unwrap();
-        let num_tracks = db.query_row("SELECT COUNT(*) FROM \"track\"", &[], |row| row.get(0)).unwrap();
+        let num_tracks = db
+            .query_row("SELECT COUNT(*) FROM \"track\"", &[], |row| row.get(0))
+            .unwrap();
         assert_eq!(3, num_tracks);
     }
 
@@ -554,7 +597,9 @@ mod tests {
         let fs = Filesystem::with_db(db(), path::Path::new(ALBUM)).unwrap();
         thread::sleep(time::Duration::from_secs(1)); // Await initial scan.
         let file = "01 - The B-Trees - Lucy in the Cloud with Sine Waves.flac";
-        let pt = track_from_path(&path::Path::new("testdata/Various Artists - Dark Sine of the Moon").join(file)).unwrap();
+        let pt = track_from_path(
+            &path::Path::new("testdata/Various Artists - Dark Sine of the Moon").join(file),
+        ).unwrap();
         let db = fs.track_by_path(path::Path::new(file)).unwrap().unwrap();
         assert_eq!(pt.title(), db.title());
         assert_eq!(pt.artists(), db.artists());
@@ -566,10 +611,16 @@ mod tests {
         assert_eq!(pt.album_track(), db.album_track());
         assert_eq!(pt.rating(), db.rating());
         assert_eq!(pt.release(), db.release());
-        let pt_mod = pt.modified_at().unwrap()
-            .duration_since(time::UNIX_EPOCH).unwrap();
-        let db_mod = db.modified_at().unwrap()
-            .duration_since(time::UNIX_EPOCH).unwrap();
+        let pt_mod = pt
+            .modified_at()
+            .unwrap()
+            .duration_since(time::UNIX_EPOCH)
+            .unwrap();
+        let db_mod = db
+            .modified_at()
+            .unwrap()
+            .duration_since(time::UNIX_EPOCH)
+            .unwrap();
         assert_eq!(pt_mod.as_secs(), db_mod.as_secs());
         assert_eq!(pt.duration().as_secs(), db.duration().as_secs());
     }
@@ -577,15 +628,26 @@ mod tests {
     #[test]
     fn clean_tracks() {
         let db = db();
-        db.execute(r#"
+        db.execute(
+            r#"
             INSERT INTO "track"
             ("path", "modified_at", "duration", "title")
             VALUES ('/home/user/non_existing.file', 1337, 42, 'Dummy')
-        "#, &[]).unwrap();
-        assert_eq!(1, db.query_row("SELECT COUNT(*) FROM \"track\"", &[], |row| row.get(0)).unwrap());
+        "#,
+            &[],
+        ).unwrap();
+        assert_eq!(
+            1,
+            db.query_row("SELECT COUNT(*) FROM \"track\"", &[], |row| row.get(0))
+                .unwrap()
+        );
 
         track_clean_recursive(&db, path::Path::new("/home/user/")).unwrap();
-        assert_eq!(0, db.query_row("SELECT COUNT(*) FROM \"track\"", &[], |row| row.get(0)).unwrap());
+        assert_eq!(
+            0,
+            db.query_row("SELECT COUNT(*) FROM \"track\"", &[], |row| row.get(0))
+                .unwrap()
+        );
     }
 
     #[test]

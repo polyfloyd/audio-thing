@@ -1,14 +1,13 @@
-use std::*;
+use audio::*;
+use rand::{self, Rng};
 use std::borrow::Cow;
 use std::collections::BTreeSet;
 use std::sync::Arc;
-use rand::{self, Rng};
-use ::audio::*;
+use std::*;
 
 pub mod fs;
 mod release;
 pub use self::release::*;
-
 
 pub trait Library: Send + Sync {
     /// Returns the unique name of this library. May not contain whitespace.
@@ -17,19 +16,24 @@ pub trait Library: Send + Sync {
     fn find_by_id(&self, id: &Identity) -> Result<Option<Audio>, Box<error::Error>>;
 
     // TODO: search
-    fn tracks(&self) -> Result<Box<iter::Iterator<Item=Arc<Track>>>, Box<error::Error>>;
+    fn tracks(&self) -> Result<Box<iter::Iterator<Item = Arc<Track>>>, Box<error::Error>>;
 }
 
 pub fn resolve_all<L>(libs: &[L], ids: &[&Identity]) -> Result<Vec<Audio>, Box<error::Error>>
-    where L: borrow::Borrow<Library> {
+where
+    L: borrow::Borrow<Library>,
+{
     ids.into_iter()
         .filter_map(|id| {
             let (name, _) = id.id();
-            let lib = libs.iter()
-                .find(|lib| lib.borrow().name() == name);
+            let lib = libs.iter().find(|lib| lib.borrow().name() == name);
             let lib = match lib {
                 Some(lib) => lib,
-                None => return Some(Err(Box::from(PlaylistError::MissingLibrary(name.into_owned())))),
+                None => {
+                    return Some(Err(Box::from(PlaylistError::MissingLibrary(
+                        name.into_owned(),
+                    ))))
+                }
             };
             match lib.borrow().find_by_id(id) {
                 Ok(Some(audio)) => Some(Ok(audio)),
@@ -39,7 +43,6 @@ pub fn resolve_all<L>(libs: &[L], ids: &[&Identity]) -> Result<Vec<Audio>, Box<e
         })
         .collect()
 }
-
 
 #[derive(Clone)]
 pub enum Audio {
@@ -56,7 +59,6 @@ impl Audio {
     }
 }
 
-
 impl Identity for Audio {
     fn id(&self) -> (Cow<str>, Cow<str>) {
         match *self {
@@ -66,7 +68,6 @@ impl Identity for Audio {
     }
 }
 
-
 pub trait Identity: Send + Sync {
     /// Returns the library name, equal to `Library::name()` and a string that uniquely identifies
     /// an item in its library.
@@ -74,9 +75,10 @@ pub trait Identity: Send + Sync {
 }
 
 impl<'a> Identity for &'a Identity {
-    fn id(&self) -> (Cow<str>, Cow<str>) { (*self).id() }
+    fn id(&self) -> (Cow<str>, Cow<str>) {
+        (*self).id()
+    }
 }
-
 
 pub trait TrackInfo {
     fn title(&self) -> Cow<str>;
@@ -98,7 +100,6 @@ pub trait TrackInfo {
     fn release(&self) -> Option<Release>;
 }
 
-
 pub trait Track: TrackInfo + Identity {
     fn modified_at(&self) -> Option<time::SystemTime>;
     /// Constructs the audiostream for this track at the earliest available sample. This method may
@@ -108,14 +109,15 @@ pub trait Track: TrackInfo + Identity {
     fn duration(&self) -> time::Duration;
 }
 
-
 pub trait Stream: Identity {
     fn title(&self) -> Cow<str>;
     /// Opens the stream for listening. If information about the tracks being played is available,
     /// it is applied to the specified callback.
-    fn open(&self, on_info: Arc<Fn(Option<Box<TrackInfo + Send>>)>) -> Result<dyn::Source, Box<error::Error>>;
+    fn open(
+        &self,
+        on_info: Arc<Fn(Option<Box<TrackInfo + Send>>)>,
+    ) -> Result<dyn::Source, Box<error::Error>>;
 }
-
 
 pub trait Playlist {
     /// Gets the number of tracks in the playlist without loading its complete contents.
@@ -136,7 +138,9 @@ pub trait PlaylistMut: Playlist {
     /// Inserts the given audio into the specified position.
     fn insert(&mut self, position: usize, audio: &[&Identity]) -> Result<(), Box<error::Error>> {
         let orig = self.contents()?.into_owned();
-        let contents: Vec<&Identity> = orig[..position].iter().map(|r| -> &Identity { r })
+        let contents: Vec<&Identity> = orig[..position]
+            .iter()
+            .map(|r| -> &Identity { r })
             .chain(audio.into_iter().map(|r| -> &Identity { r }))
             .chain(orig[position..].iter().map(|r| -> &Identity { r }))
             .collect();
@@ -152,7 +156,9 @@ pub trait PlaylistMut: Playlist {
         if range.end >= orig.len() {
             return Err(Box::from(PlaylistError::IndexOutOfBounds));
         }
-        let contents: Vec<&Identity> = orig.iter().take(range.start)
+        let contents: Vec<&Identity> = orig
+            .iter()
+            .take(range.start)
             .chain(orig.iter().skip(range.end))
             .map(|r| -> &Identity { r })
             .collect();
@@ -167,22 +173,22 @@ pub trait PlaylistMut: Playlist {
     /// If `to` is inside the range to be moved, this is a no-op.
     fn splice(&mut self, from: ops::Range<usize>, to: usize) -> Result<(), Box<error::Error>> {
         let orig: Vec<_> = (0..self.len()?).collect();
-        let contents: Vec<_> =
-            if to < from.start {
-                orig[0..from.start].iter()
-                    .chain(orig[from.end..to].iter())
-                    .chain(orig[from.start..from.end].iter())
-                    .chain(orig[to..].iter())
-            } else if to >= from.end {
-                orig[0..to].iter()
-                    .chain(orig[from.start..from.end].iter())
-                    .chain(orig[to..from.start].iter())
-                    .chain(orig[from.end..].iter())
-            } else {
-                // Target position is inside the range to be moved.
-                return Ok(());
-            }
-            .map(|i| *i)
+        let contents: Vec<_> = if to < from.start {
+            orig[0..from.start]
+                .iter()
+                .chain(orig[from.end..to].iter())
+                .chain(orig[from.start..from.end].iter())
+                .chain(orig[to..].iter())
+        } else if to >= from.end {
+            orig[0..to]
+                .iter()
+                .chain(orig[from.start..from.end].iter())
+                .chain(orig[to..from.start].iter())
+                .chain(orig[from.end..].iter())
+        } else {
+            // Target position is inside the range to be moved.
+            return Ok(());
+        }.map(|i| *i)
             .collect();
         self.move_all(contents.as_slice())?;
         Ok(())
@@ -230,7 +236,6 @@ pub trait PlaylistMut: Playlist {
     }
 }
 
-
 #[derive(Debug)]
 pub enum PlaylistError {
     MissingLibrary(String),
@@ -242,18 +247,18 @@ pub enum PlaylistError {
 impl fmt::Display for PlaylistError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            PlaylistError::MissingLibrary(ref name) => {
-                write!(f, "No library named {}", name)
-            },
+            PlaylistError::MissingLibrary(ref name) => write!(f, "No library named {}", name),
             PlaylistError::IndexOutOfBounds => {
                 write!(f, "An index is larger than the playlist size")
-            },
-            PlaylistError::MoveLengthMismatch => {
-                write!(f, "Unable to move all elements, length of argument array mismatched")
-            },
-            PlaylistError::MoveDuplicateIndices => {
-                write!(f, "Unable to move all elements, there are duplicate indices")
-            },
+            }
+            PlaylistError::MoveLengthMismatch => write!(
+                f,
+                "Unable to move all elements, length of argument array mismatched"
+            ),
+            PlaylistError::MoveDuplicateIndices => write!(
+                f,
+                "Unable to move all elements, there are duplicate indices"
+            ),
         }
     }
 }

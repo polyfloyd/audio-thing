@@ -1,10 +1,9 @@
-use std::*;
-use std::sync::{Arc, Condvar, Mutex};
+use audio::*;
+use filter::*;
+use player::output;
 use sample;
-use ::audio::*;
-use ::filter::*;
-use ::player::output;
-
+use std::sync::{Arc, Condvar, Mutex};
+use std::*;
 
 #[derive(Debug)]
 pub enum Event {
@@ -14,14 +13,12 @@ pub enum Event {
     Output(output::Event),
 }
 
-
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum State {
     Playing,
     Paused,
     Stopped,
 }
-
 
 pub struct Playback {
     pub stream: Box<output::Stream>,
@@ -39,53 +36,109 @@ pub struct Playback {
 impl Playback {
     /// Initializes a new Playback. Playback should be started manually by setting the playstate to
     /// Playing.
-    pub fn new(audio: dyn::Audio, output: &output::Output, event_handler: Arc<Fn(Event) + Send + Sync>) -> Playback {
+    pub fn new(
+        audio: dyn::Audio,
+        output: &output::Output,
+        event_handler: Arc<Fn(Event) + Send + Sync>,
+    ) -> Playback {
         match audio {
-            dyn::Audio::Source(source) => {
-                Playback::from_source(source, output, event_handler)
-            },
-            dyn::Audio::Seek(seek) => {
-                Playback::from_seek(seek, output, event_handler)
-            },
+            dyn::Audio::Source(source) => Playback::from_source(source, output, event_handler),
+            dyn::Audio::Seek(seek) => Playback::from_seek(seek, output, event_handler),
         }
     }
 
-    fn from_source(source: dyn::Source, output: &output::Output, event_handler: Arc<Fn(Event) + Send + Sync>) -> Playback {
+    fn from_source(
+        source: dyn::Source,
+        output: &output::Output,
+        event_handler: Arc<Fn(Event) + Send + Sync>,
+    ) -> Playback {
         let flow_state = Arc::new((Condvar::new(), Mutex::new(State::Paused)));
         let sample_counter = Arc::new(Mutex::new(0));
 
-        fn with_control<I>(source: I, fs: &Arc<(Condvar, Mutex<State>)>, sc: &Arc<Mutex<u64>>) -> Box<Source<Item=I::Item> + Send>
-            where I: Source + Send + 'static,
-                  I::Item: sample::Frame {
-            Box::from(source
-                .flow_control(fs.clone())
-                .count_samples(sc.clone()))
+        fn with_control<I>(
+            source: I,
+            fs: &Arc<(Condvar, Mutex<State>)>,
+            sc: &Arc<Mutex<u64>>,
+        ) -> Box<Source<Item = I::Item> + Send>
+        where
+            I: Source + Send + 'static,
+            I::Item: sample::Frame,
+        {
+            Box::from(source.flow_control(fs.clone()).count_samples(sc.clone()))
         }
         let source_out = match source {
-            dyn::Source::MonoI8(s) => dyn::Source::MonoI8(with_control(s, &flow_state, &sample_counter)),
-            dyn::Source::MonoU8(s) => dyn::Source::MonoU8(with_control(s, &flow_state, &sample_counter)),
-            dyn::Source::MonoI16(s) => dyn::Source::MonoI16(with_control(s, &flow_state, &sample_counter)),
-            dyn::Source::MonoU16(s) => dyn::Source::MonoU16(with_control(s, &flow_state, &sample_counter)),
-            dyn::Source::MonoI24(s) => dyn::Source::MonoI24(with_control(s, &flow_state, &sample_counter)),
-            dyn::Source::MonoU24(s) => dyn::Source::MonoU24(with_control(s, &flow_state, &sample_counter)),
-            dyn::Source::MonoI32(s) => dyn::Source::MonoI32(with_control(s, &flow_state, &sample_counter)),
-            dyn::Source::MonoU32(s) => dyn::Source::MonoU32(with_control(s, &flow_state, &sample_counter)),
-            dyn::Source::MonoI64(s) => dyn::Source::MonoI64(with_control(s, &flow_state, &sample_counter)),
-            dyn::Source::MonoU64(s) => dyn::Source::MonoU64(with_control(s, &flow_state, &sample_counter)),
-            dyn::Source::MonoF32(s) => dyn::Source::MonoF32(with_control(s, &flow_state, &sample_counter)),
-            dyn::Source::MonoF64(s) => dyn::Source::MonoF64(with_control(s, &flow_state, &sample_counter)),
-            dyn::Source::StereoI8(s) => dyn::Source::StereoI8(with_control(s, &flow_state, &sample_counter)),
-            dyn::Source::StereoU8(s) => dyn::Source::StereoU8(with_control(s, &flow_state, &sample_counter)),
-            dyn::Source::StereoI16(s) => dyn::Source::StereoI16(with_control(s, &flow_state, &sample_counter)),
-            dyn::Source::StereoU16(s) => dyn::Source::StereoU16(with_control(s, &flow_state, &sample_counter)),
-            dyn::Source::StereoI24(s) => dyn::Source::StereoI24(with_control(s, &flow_state, &sample_counter)),
-            dyn::Source::StereoU24(s) => dyn::Source::StereoU24(with_control(s, &flow_state, &sample_counter)),
-            dyn::Source::StereoI32(s) => dyn::Source::StereoI32(with_control(s, &flow_state, &sample_counter)),
-            dyn::Source::StereoU32(s) => dyn::Source::StereoU32(with_control(s, &flow_state, &sample_counter)),
-            dyn::Source::StereoI64(s) => dyn::Source::StereoI64(with_control(s, &flow_state, &sample_counter)),
-            dyn::Source::StereoU64(s) => dyn::Source::StereoU64(with_control(s, &flow_state, &sample_counter)),
-            dyn::Source::StereoF32(s) => dyn::Source::StereoF32(with_control(s, &flow_state, &sample_counter)),
-            dyn::Source::StereoF64(s) => dyn::Source::StereoF64(with_control(s, &flow_state, &sample_counter)),
+            dyn::Source::MonoI8(s) => {
+                dyn::Source::MonoI8(with_control(s, &flow_state, &sample_counter))
+            }
+            dyn::Source::MonoU8(s) => {
+                dyn::Source::MonoU8(with_control(s, &flow_state, &sample_counter))
+            }
+            dyn::Source::MonoI16(s) => {
+                dyn::Source::MonoI16(with_control(s, &flow_state, &sample_counter))
+            }
+            dyn::Source::MonoU16(s) => {
+                dyn::Source::MonoU16(with_control(s, &flow_state, &sample_counter))
+            }
+            dyn::Source::MonoI24(s) => {
+                dyn::Source::MonoI24(with_control(s, &flow_state, &sample_counter))
+            }
+            dyn::Source::MonoU24(s) => {
+                dyn::Source::MonoU24(with_control(s, &flow_state, &sample_counter))
+            }
+            dyn::Source::MonoI32(s) => {
+                dyn::Source::MonoI32(with_control(s, &flow_state, &sample_counter))
+            }
+            dyn::Source::MonoU32(s) => {
+                dyn::Source::MonoU32(with_control(s, &flow_state, &sample_counter))
+            }
+            dyn::Source::MonoI64(s) => {
+                dyn::Source::MonoI64(with_control(s, &flow_state, &sample_counter))
+            }
+            dyn::Source::MonoU64(s) => {
+                dyn::Source::MonoU64(with_control(s, &flow_state, &sample_counter))
+            }
+            dyn::Source::MonoF32(s) => {
+                dyn::Source::MonoF32(with_control(s, &flow_state, &sample_counter))
+            }
+            dyn::Source::MonoF64(s) => {
+                dyn::Source::MonoF64(with_control(s, &flow_state, &sample_counter))
+            }
+            dyn::Source::StereoI8(s) => {
+                dyn::Source::StereoI8(with_control(s, &flow_state, &sample_counter))
+            }
+            dyn::Source::StereoU8(s) => {
+                dyn::Source::StereoU8(with_control(s, &flow_state, &sample_counter))
+            }
+            dyn::Source::StereoI16(s) => {
+                dyn::Source::StereoI16(with_control(s, &flow_state, &sample_counter))
+            }
+            dyn::Source::StereoU16(s) => {
+                dyn::Source::StereoU16(with_control(s, &flow_state, &sample_counter))
+            }
+            dyn::Source::StereoI24(s) => {
+                dyn::Source::StereoI24(with_control(s, &flow_state, &sample_counter))
+            }
+            dyn::Source::StereoU24(s) => {
+                dyn::Source::StereoU24(with_control(s, &flow_state, &sample_counter))
+            }
+            dyn::Source::StereoI32(s) => {
+                dyn::Source::StereoI32(with_control(s, &flow_state, &sample_counter))
+            }
+            dyn::Source::StereoU32(s) => {
+                dyn::Source::StereoU32(with_control(s, &flow_state, &sample_counter))
+            }
+            dyn::Source::StereoI64(s) => {
+                dyn::Source::StereoI64(with_control(s, &flow_state, &sample_counter))
+            }
+            dyn::Source::StereoU64(s) => {
+                dyn::Source::StereoU64(with_control(s, &flow_state, &sample_counter))
+            }
+            dyn::Source::StereoF32(s) => {
+                dyn::Source::StereoF32(with_control(s, &flow_state, &sample_counter))
+            }
+            dyn::Source::StereoF64(s) => {
+                dyn::Source::StereoF64(with_control(s, &flow_state, &sample_counter))
+            }
         };
 
         let eh_sub = event_handler.clone();
@@ -106,127 +159,143 @@ impl Playback {
         }
     }
 
-    fn from_seek(seek: dyn::Seek, output: &output::Output, event_handler: Arc<Fn(Event) + Send + Sync>) -> Playback {
+    fn from_seek(
+        seek: dyn::Seek,
+        output: &output::Output,
+        event_handler: Arc<Fn(Event) + Send + Sync>,
+    ) -> Playback {
         let flow_state = Arc::new((Condvar::new(), Mutex::new(State::Paused)));
         let sample_counter = Arc::new(Mutex::new(0));
         let tempo = Arc::new(Mutex::new(1.0));
 
-        fn with_control<I>(seek: I, fs: &Arc<(Condvar, Mutex<State>)>, sc: &Arc<Mutex<u64>>, t: &Arc<Mutex<f64>>) -> (Box<Source<Item=I::Item> + Send>, Arc<Mutex<Seekable + Send>>)
-            where I: Seek + Send + 'static,
-                  I::Item: sample::Frame + Send,
-                  <I::Item as sample::Frame>::Float: Send,
-                  <I::Item as sample::Frame>::Sample: sample::ToSample<f64> +
-                                                      sample::FromSample<f64> +
-                                                      sample::FromSample<<<I::Item as sample::Frame>::Float as sample::Frame>::Sample> +
-                                                      Send + 'static {
-                let shared_seek = seek
-                    .shared();
-                let mut_seek = shared_seek.input.clone();
-                let source_out = shared_seek
-                    .stft(1024)
-                    .adjust_tempo(t.clone())
-                    .inverse()
-                    .flow_control(fs.clone())
-                    .count_samples(sc.clone());
-                (Box::from(source_out), mut_seek)
+        fn with_control<I>(
+            seek: I,
+            fs: &Arc<(Condvar, Mutex<State>)>,
+            sc: &Arc<Mutex<u64>>,
+            t: &Arc<Mutex<f64>>,
+        ) -> (
+            Box<Source<Item = I::Item> + Send>,
+            Arc<Mutex<Seekable + Send>>,
+        )
+        where
+            I: Seek + Send + 'static,
+            I::Item: sample::Frame + Send,
+            <I::Item as sample::Frame>::Float: Send,
+            <I::Item as sample::Frame>::Sample: sample::ToSample<f64>
+                + sample::FromSample<f64>
+                + sample::FromSample<
+                    <<I::Item as sample::Frame>::Float as sample::Frame>::Sample,
+                >
+                + Send
+                + 'static,
+        {
+            let shared_seek = seek.shared();
+            let mut_seek = shared_seek.input.clone();
+            let source_out = shared_seek
+                .stft(1024)
+                .adjust_tempo(t.clone())
+                .inverse()
+                .flow_control(fs.clone())
+                .count_samples(sc.clone());
+            (Box::from(source_out), mut_seek)
         }
         let (source_out, mut_seek) = match seek {
             dyn::Seek::MonoI8(s) => {
                 let (o, m) = with_control(s, &flow_state, &sample_counter, &tempo);
                 (dyn::Source::MonoI8(o), m)
-            },
+            }
             dyn::Seek::MonoU8(s) => {
                 let (o, m) = with_control(s, &flow_state, &sample_counter, &tempo);
                 (dyn::Source::MonoU8(o), m)
-            },
+            }
             dyn::Seek::MonoI16(s) => {
                 let (o, m) = with_control(s, &flow_state, &sample_counter, &tempo);
                 (dyn::Source::MonoI16(o), m)
-            },
+            }
             dyn::Seek::MonoU16(s) => {
                 let (o, m) = with_control(s, &flow_state, &sample_counter, &tempo);
                 (dyn::Source::MonoU16(o), m)
-            },
+            }
             dyn::Seek::MonoI24(s) => {
                 let (o, m) = with_control(s, &flow_state, &sample_counter, &tempo);
                 (dyn::Source::MonoI24(o), m)
-            },
+            }
             dyn::Seek::MonoU24(s) => {
                 let (o, m) = with_control(s, &flow_state, &sample_counter, &tempo);
                 (dyn::Source::MonoU24(o), m)
-            },
+            }
             dyn::Seek::MonoI32(s) => {
                 let (o, m) = with_control(s, &flow_state, &sample_counter, &tempo);
                 (dyn::Source::MonoI32(o), m)
-            },
+            }
             dyn::Seek::MonoU32(s) => {
                 let (o, m) = with_control(s, &flow_state, &sample_counter, &tempo);
                 (dyn::Source::MonoU32(o), m)
-            },
+            }
             dyn::Seek::MonoI64(s) => {
                 let (o, m) = with_control(s, &flow_state, &sample_counter, &tempo);
                 (dyn::Source::MonoI64(o), m)
-            },
+            }
             dyn::Seek::MonoU64(s) => {
                 let (o, m) = with_control(s, &flow_state, &sample_counter, &tempo);
                 (dyn::Source::MonoU64(o), m)
-            },
+            }
             dyn::Seek::MonoF32(s) => {
                 let (o, m) = with_control(s, &flow_state, &sample_counter, &tempo);
                 (dyn::Source::MonoF32(o), m)
-            },
+            }
             dyn::Seek::MonoF64(s) => {
                 let (o, m) = with_control(s, &flow_state, &sample_counter, &tempo);
                 (dyn::Source::MonoF64(o), m)
-            },
+            }
             dyn::Seek::StereoI8(s) => {
                 let (o, m) = with_control(s, &flow_state, &sample_counter, &tempo);
                 (dyn::Source::StereoI8(o), m)
-            },
+            }
             dyn::Seek::StereoU8(s) => {
                 let (o, m) = with_control(s, &flow_state, &sample_counter, &tempo);
                 (dyn::Source::StereoU8(o), m)
-            },
+            }
             dyn::Seek::StereoI16(s) => {
                 let (o, m) = with_control(s, &flow_state, &sample_counter, &tempo);
                 (dyn::Source::StereoI16(o), m)
-            },
+            }
             dyn::Seek::StereoU16(s) => {
                 let (o, m) = with_control(s, &flow_state, &sample_counter, &tempo);
                 (dyn::Source::StereoU16(o), m)
-            },
+            }
             dyn::Seek::StereoI24(s) => {
                 let (o, m) = with_control(s, &flow_state, &sample_counter, &tempo);
                 (dyn::Source::StereoI24(o), m)
-            },
+            }
             dyn::Seek::StereoU24(s) => {
                 let (o, m) = with_control(s, &flow_state, &sample_counter, &tempo);
                 (dyn::Source::StereoU24(o), m)
-            },
+            }
             dyn::Seek::StereoI32(s) => {
                 let (o, m) = with_control(s, &flow_state, &sample_counter, &tempo);
                 (dyn::Source::StereoI32(o), m)
-            },
+            }
             dyn::Seek::StereoU32(s) => {
                 let (o, m) = with_control(s, &flow_state, &sample_counter, &tempo);
                 (dyn::Source::StereoU32(o), m)
-            },
+            }
             dyn::Seek::StereoI64(s) => {
                 let (o, m) = with_control(s, &flow_state, &sample_counter, &tempo);
                 (dyn::Source::StereoI64(o), m)
-            },
+            }
             dyn::Seek::StereoU64(s) => {
                 let (o, m) = with_control(s, &flow_state, &sample_counter, &tempo);
                 (dyn::Source::StereoU64(o), m)
-            },
+            }
             dyn::Seek::StereoF32(s) => {
                 let (o, m) = with_control(s, &flow_state, &sample_counter, &tempo);
                 (dyn::Source::StereoF32(o), m)
-            },
+            }
             dyn::Seek::StereoF64(s) => {
                 let (o, m) = with_control(s, &flow_state, &sample_counter, &tempo);
                 (dyn::Source::StereoF64(o), m)
-            },
+            }
         };
 
         let eh_sub = event_handler.clone();
@@ -257,9 +326,7 @@ impl Playback {
     /// Returns the duration as a Duration if known.
     pub fn duration_time(&self) -> Option<time::Duration> {
         self.duration()
-            .map(|num_samples| {
-                duration_of(self.sample_rate, num_samples)
-            })
+            .map(|num_samples| duration_of(self.sample_rate, num_samples))
     }
 
     /// Returns the position of the sample that will be read next.
@@ -327,20 +394,23 @@ impl Playback {
     }
 }
 
-
 /// FlowControl acts as a part of a signal pipeline allowing the flow to be paused and stopped.
 /// Because pausing works by blocking any calls to next, `FlowControl` provides its own concurrency
 /// method instead of recommending `audio::Shared`.
 struct FlowControl<S>
-    where S: Source,
-          S::Item: sample::Frame {
+where
+    S: Source,
+    S::Item: sample::Frame,
+{
     pub state: Arc<(Condvar, Mutex<State>)>,
     input: S,
 }
 
 impl<S> iter::Iterator for FlowControl<S>
-    where S: Source,
-          S::Item: sample::Frame {
+where
+    S: Source,
+    S::Item: sample::Frame,
+{
     type Item = S::Item;
     fn next(&mut self) -> Option<Self::Item> {
         let &(ref cvar, ref lock) = &*self.state;
@@ -351,28 +421,34 @@ impl<S> iter::Iterator for FlowControl<S>
         }
 
         match *state {
-            State::Paused  => unreachable!(),
+            State::Paused => unreachable!(),
             State::Stopped => return None,
             State::Playing => {
                 let f = self.input.next();
                 if f.is_none() {
                     *state = State::Stopped;
                 }
-                return f
-            },
+                return f;
+            }
         }
     }
 }
 
 impl<S> Source for FlowControl<S>
-    where S: Source,
-          S::Item: sample::Frame {
-    fn sample_rate(&self) -> u32 { self.input.sample_rate() }
+where
+    S: Source,
+    S::Item: sample::Frame,
+{
+    fn sample_rate(&self) -> u32 {
+        self.input.sample_rate()
+    }
 }
 
 impl<S> Drop for FlowControl<S>
-    where S: Source,
-          S::Item: sample::Frame {
+where
+    S: Source,
+    S::Item: sample::Frame,
+{
     // If the state is set to paused, another thread attempting to read from the stream is blocked.
     // Here, we set the state to stopped when this FlowControl is dropped, so that the reading
     // thread will never deadlock.
@@ -384,27 +460,38 @@ impl<S> Drop for FlowControl<S>
 }
 
 trait IntoFlowControl: Source + Sized
-    where Self::Item: sample::Frame {
+where
+    Self::Item: sample::Frame,
+{
     fn flow_control(self, state: Arc<(Condvar, Mutex<State>)>) -> FlowControl<Self> {
-        FlowControl{ state: state, input: self }
+        FlowControl {
+            state: state,
+            input: self,
+        }
     }
 }
 
 impl<T> IntoFlowControl for T
-    where T: Source,
-          T::Item: sample::Frame { }
-
+where
+    T: Source,
+    T::Item: sample::Frame,
+{
+}
 
 struct SampleCounter<S>
-    where S: Source,
-          S::Item: sample::Frame {
+where
+    S: Source,
+    S::Item: sample::Frame,
+{
     pub counter: Arc<Mutex<u64>>,
     input: S,
 }
 
 impl<S> iter::Iterator for SampleCounter<S>
-    where S: Source,
-          S::Item: sample::Frame {
+where
+    S: Source,
+    S::Item: sample::Frame,
+{
     type Item = S::Item;
     fn next(&mut self) -> Option<Self::Item> {
         let n = self.input.next();
@@ -416,18 +503,30 @@ impl<S> iter::Iterator for SampleCounter<S>
 }
 
 impl<S> Source for SampleCounter<S>
-    where S: Source,
-          S::Item: sample::Frame {
-    fn sample_rate(&self) -> u32 { self.input.sample_rate() }
+where
+    S: Source,
+    S::Item: sample::Frame,
+{
+    fn sample_rate(&self) -> u32 {
+        self.input.sample_rate()
+    }
 }
 
 trait IntoSampleCounter: Source + Sized
-    where Self::Item: sample::Frame {
+where
+    Self::Item: sample::Frame,
+{
     fn count_samples(self, counter: Arc<Mutex<u64>>) -> SampleCounter<Self> {
-        SampleCounter{ counter: counter, input: self }
+        SampleCounter {
+            counter: counter,
+            input: self,
+        }
     }
 }
 
 impl<T> IntoSampleCounter for T
-    where T: Source,
-          T::Item: sample::Frame { }
+where
+    T: Source,
+    T::Item: sample::Frame,
+{
+}
