@@ -185,7 +185,7 @@ impl Filesystem {
 
 impl library::Library for Filesystem {
     fn name(&self) -> Cow<str> {
-        Cow::Borrowed("fs")
+        Cow::Owned(format!("file://{}", self.root.to_string_lossy()))
     }
 
     fn find_by_id(
