@@ -119,11 +119,11 @@ fn find_bitrate(index: u8, version: MpegVersion, layer: MpegLayer) -> Result<Opt
             (0b0000, _, _) => return Ok(None),
             // 1111   bad     bad     bad     bad     bad
             (0b1111, _, _) => return Ok(None),
-            (index, v, l) => {
+            (index, version, layer) => {
                 return Err(Error::UnknownBitrate {
-                    index: index,
-                    layer: l,
-                    version: v,
+                    index,
+                    layer,
+                    version,
                 })
             }
         } * 1000,
@@ -136,7 +136,7 @@ pub fn find_stream<R>(input: &mut R) -> Result<(), Error>
 where
     R: io::Read + io::Seek,
 {
-    'sync_frame: loop {
+    loop {
         let block_offset = input.seek(io::SeekFrom::Current(0))?;
         let mut buf = [0; 8192];
         let num_read = input.read(&mut buf)?;
@@ -249,27 +249,27 @@ impl FrameIndex {
                 L2 | L3 => 144 * bitrate / sample_rate + padding,
             };
 
-            let next = input.seek(io::SeekFrom::Start(header_offset + frame_length as u64))?;
+            let next = input.seek(io::SeekFrom::Start(header_offset + u64::from(frame_length)))?;
             assert!(next > header_offset);
 
             frames.push(Frame {
                 offset: header_offset,
                 length: frame_length,
                 num_samples: num_samples / num_channels,
-                sample_offset: sample_count / num_channels as u64,
+                sample_offset: sample_count / u64::from(num_channels),
             });
-            sample_count += num_samples as u64;
+            sample_count += u64::from(num_samples);
         }
 
-        if frames.len() == 0 {
+        if frames.is_empty() {
             return Err(Error::MissingSync);
         }
-        Ok(FrameIndex { frames: frames })
+        Ok(FrameIndex { frames })
     }
 
     pub fn num_samples(&self) -> u64 {
         let frame = self.frames.last().unwrap();
-        frame.sample_offset + frame.num_samples as u64
+        frame.sample_offset + u64::from(frame.num_samples)
     }
 
     pub fn frame_for_sample(&self, nth_sample: u64) -> Option<usize> {
@@ -277,13 +277,12 @@ impl FrameIndex {
             .binary_search_by(|frame| {
                 if frame.sample_offset > nth_sample {
                     cmp::Ordering::Greater
-                } else if frame.sample_offset + (frame.num_samples as u64) < nth_sample {
+                } else if frame.sample_offset + (u64::from(frame.num_samples)) < nth_sample {
                     cmp::Ordering::Less
                 } else {
                     cmp::Ordering::Equal
                 }
-            })
-            .ok()
+            }).ok()
     }
 }
 

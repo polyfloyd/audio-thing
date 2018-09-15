@@ -78,7 +78,7 @@ impl library::Track for RawTrack {
 
     fn audio(&self) -> Result<dyn::Seek, Box<error::Error>> {
         let (decoder, _) = format::decode_file(path::Path::new(&self.path))?;
-        decoder.into_seek().ok_or(Box::from(Error::NonSeek))
+        decoder.into_seek().ok_or_else(|| Box::from(Error::NonSeek))
     }
 
     fn duration(&self) -> time::Duration {
@@ -141,9 +141,8 @@ where
                     .captures(&*stem)
                     .and_then(|cap| cap.get(1))
                     .map(|m| vec![m.as_str().into()])
-                    .unwrap_or(vec![])
-            })
-            .into()
+                    .unwrap_or_else(Vec::new)
+            }).into()
     }
 
     fn remixers(&self) -> Cow<[String]> {
@@ -156,7 +155,7 @@ where
             .as_ref()
             .and_then(|t| t.genre())
             .map(|g| g.split(',').map(|t| t.trim().to_string()).collect())
-            .unwrap_or(vec![])
+            .unwrap_or_else(Vec::new)
             .into()
     }
 
@@ -174,7 +173,7 @@ where
             .as_ref()
             .and_then(|t| t.album_artist())
             .map(|a| vec![a.to_string()])
-            .unwrap_or(vec![])
+            .unwrap_or_else(Vec::new)
             .into()
     }
 
@@ -214,8 +213,7 @@ where
                 data.iter()
                     .position(|b| *b == 0)
                     .and_then(|i| data.get(i + 1))
-            })
-            .and_then(|num| match *num {
+            }).and_then(|num| match *num {
                 0 => None,
                 1...31 => Some(1),
                 32...95 => Some(2),
@@ -251,7 +249,7 @@ where
 
     fn audio(&self) -> Result<dyn::Seek, Box<error::Error>> {
         let (decoder, _) = format::decode_file(&self.path)?;
-        decoder.into_seek().ok_or(Box::from(Error::NonSeek))
+        decoder.into_seek().ok_or_else(|| Box::from(Error::NonSeek))
     }
 
     fn duration(&self) -> time::Duration {

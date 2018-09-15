@@ -7,7 +7,7 @@ use std::borrow::Cow;
 use std::ops::DerefMut;
 use std::*;
 
-pub const MAGIC: &'static [u8] = b"fLaC";
+pub const MAGIC: &[u8] = b"fLaC";
 
 struct Decoder<F, R>
 where
@@ -44,7 +44,7 @@ where
         }
 
         let mut cb_data = Box::new(DecoderCallbackData {
-            input: input,
+            input,
             current_block: None,
             meta: Some(format::Metadata {
                 sample_rate: 0,
@@ -309,8 +309,7 @@ where
             (0..fr.header.blocksize)
                 .map(|i| *chan_base_ptr.offset(i as isize))
                 .collect()
-        })
-        .collect();
+        }).collect();
     data.current_block = Some(Block { data: block_data });
     FLAC__StreamDecoderWriteStatus::FLAC__STREAM_DECODER_WRITE_STATUS_CONTINUE
 }
@@ -436,7 +435,7 @@ unsafe extern "C" fn metadata_cb<R>(
                 .iter()
                 .filter_map(|c| entry_as_str(c))
                 .filter_map(|s| s.find('=').map(|i| (s, i)))
-                .filter(|&(ref s, ref i)| s[*i..].trim().len() > 0);
+                .filter(|&(ref s, ref i)| !s[*i..].trim().is_empty());
             for (s, i) in strings {
                 use id3::frame::Content;
                 let (key, value) = s.split_at(i);
@@ -463,12 +462,11 @@ unsafe extern "C" fn metadata_cb<R>(
                                 4 => Some(196),
                                 5 => Some(255),
                                 _ => None,
-                            })
-                            .map(|n| {
+                            }).map(|n| {
                                 let mut a = "Windows Media Player 9 Series\0_\0\0\0\0"
                                     .to_string()
                                     .into_bytes();
-                                assert_eq!(a[30], '_' as u8);
+                                assert_eq!(a[30], b'_');
                                 a[30] = n;
                                 Content::Unknown(a)
                             });
@@ -508,7 +506,7 @@ unsafe extern "C" fn metadata_cb<R>(
                 .to_string();
             use id3::frame::PictureType;
             use libflac_sys::FLAC__StreamMetadata_Picture_Type::*;
-            let typ = match picture.type_ {
+            let picture_type = match picture.type_ {
                 FLAC__STREAM_METADATA_PICTURE_TYPE_FILE_ICON_STANDARD => PictureType::Icon,
                 FLAC__STREAM_METADATA_PICTURE_TYPE_FILE_ICON => PictureType::OtherIcon,
                 FLAC__STREAM_METADATA_PICTURE_TYPE_FRONT_COVER => PictureType::CoverFront,
@@ -544,9 +542,9 @@ unsafe extern "C" fn metadata_cb<R>(
             ));
             let content = id3::frame::Content::Picture(id3::frame::Picture {
                 mime_type: mime.to_string(),
-                picture_type: typ,
-                description: description,
-                data: data,
+                picture_type,
+                description,
+                data,
             });
             meta.tag
                 .as_mut()
@@ -557,9 +555,7 @@ unsafe extern "C" fn metadata_cb<R>(
     }
 }
 
-unsafe fn entry_as_str<'a>(
-    entry: &'a FLAC__StreamMetadata_VorbisComment_Entry,
-) -> Option<Cow<'a, str>> {
+unsafe fn entry_as_str(entry: &FLAC__StreamMetadata_VorbisComment_Entry) -> Option<Cow<'_, str>> {
     if entry.length == 0 {
         return None;
     }
@@ -581,7 +577,7 @@ pub trait SeekExt: io::Read + io::Seek {
     fn tell(&mut self) -> Result<u64, ()> {
         match self.seek(io::SeekFrom::Current(0)) {
             Ok(pos) => Ok(pos),
-            Err(_) => return Err(()),
+            Err(_) => Err(()),
         }
     }
 }

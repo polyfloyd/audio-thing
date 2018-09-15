@@ -36,7 +36,7 @@ impl library::Playlist for Playlist {
         let mut count = 0;
         for line in io::BufReader::new(fs::File::open(&self.file)?).lines() {
             let line = line?;
-            if line.len() != 0 && !line.starts_with('#') {
+            if !line.is_empty() && !line.starts_with('#') {
                 count += 1;
             }
         }
@@ -59,23 +59,23 @@ impl library::PlaylistMut for Playlist {
         let fs_arc = self.fs.upgrade().ok_or(Error::Unspecified)?;
         let fs = fs_arc.lock().unwrap();
         let mut file = fs::File::open(&self.file)?;
-        write!(file, "#EXTM3U\n")?;
-        for entry in contents.into_iter() {
+        writeln!(file, "#EXTM3U")?;
+        for entry in contents {
             let (lib, id) = entry.id();
             if lib != self.id().0 {
                 return Err(Box::from(Error::Unspecified));
             }
             if let Some(track) = fs.track_by_path(path::Path::new(&*id))? {
-                write!(
+                writeln!(
                     file,
-                    "#EXTINF:{},{}\n",
+                    "#EXTINF:{},{}",
                     track.duration().as_secs(),
                     track.title()
                 )?;
             } else {
-                write!(file, "#EXTINF:0,\n")?;
+                writeln!(file, "#EXTINF:0,")?;
             }
-            write!(file, "{}\n", id)?;
+            writeln!(file, "{}", id)?;
         }
         file.flush()?;
         Ok(())
@@ -86,7 +86,7 @@ fn read_m3u(fs: &Filesystem, file: &path::Path) -> Result<Vec<library::Audio>, B
     let mut contents = Vec::new();
     for line in io::BufReader::new(fs::File::open(file)?).lines() {
         let line = line?;
-        if line.len() == 0 || line.starts_with('#') {
+        if line.is_empty() || line.starts_with('#') {
             continue;
         }
         let entry = path::Path::new(&line);

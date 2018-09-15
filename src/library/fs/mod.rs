@@ -30,7 +30,7 @@ impl Filesystem {
         let wanted_version = {
             let mut s = collections::hash_map::DefaultHasher::new();
             database_schema.hash(&mut s);
-            (s.finish() % u32::MAX as u64) as i64
+            (s.finish() & 0x7fff_ffff_ffff_ffff) as i64
         };
         let db_version = db
             .prepare("PRAGMA user_version")?
@@ -66,7 +66,7 @@ impl Filesystem {
             root.to_string_lossy()
         );
         let fs = Filesystem {
-            root: root,
+            root,
             db: sync::Arc::new(sync::Mutex::new(db)),
         };
 
@@ -83,7 +83,7 @@ impl Filesystem {
                 if let Err(err) = add_to_index(&mut db, &root) {
                     error!("error building index: {}", err);
                 }
-                if let Err(err) = track_clean_recursive(&mut db, path::Path::new("")) {
+                if let Err(err) = track_clean_recursive(&db, path::Path::new("")) {
                     error!("error cleaning index: {}", err);
                 }
                 debug!("done updating index in {:?}", update_start.elapsed());
@@ -96,7 +96,7 @@ impl Filesystem {
                 .watch(root, notify::RecursiveMode::Recursive)
                 .unwrap();
 
-            for event in rx.into_iter() {
+            for event in rx {
                 macro_rules! with_db {
                     ($expr:expr) => {{
                         let arc = match db_weak.upgrade() {
@@ -250,8 +250,7 @@ impl library::Library for Filesystem {
                     track.genres.push(genre?);
                 }
                 Ok(track)
-            })?
-            .collect(); // TODO: Stream results instead of collecting.
+            })?.collect(); // TODO: Stream results instead of collecting.
         Ok(Box::from(tracks?.into_iter().map(
             |t| -> sync::Arc<library::Track> { sync::Arc::new(t) },
         )))
@@ -283,7 +282,7 @@ fn add_to_index(db: &mut sqlite::Connection, path: &path::Path) -> Result<(), Er
                 track_add(db, &*entry.path(), &entry.metadata()?)?;
             }
         }
-        return Ok(());
+        Ok(())
     }
     fn track_add(
         db: &mut sqlite::Connection,
@@ -295,7 +294,9 @@ fn add_to_index(db: &mut sqlite::Connection, path: &path::Path) -> Result<(), Er
         // Check whether the index is outdated by comparing the timestamp of the file with the one
         // in the database.
         let mtime = Timestamp(metadata.modified()?);
-        let path_str = path.to_str().ok_or(Error::BadPath(path.to_path_buf()))?;
+        let path_str = path
+            .to_str()
+            .ok_or_else(|| Error::BadPath(path.to_path_buf()))?;
         let up_to_date = db.query_row(
             r#"
             SELECT COUNT(*) AS "num" FROM "track"
@@ -311,7 +312,7 @@ fn add_to_index(db: &mut sqlite::Connection, path: &path::Path) -> Result<(), Er
             return Ok(());
         }
 
-        let metadata = match format::decode_metadata_file(path) {
+        let meta = match format::decode_metadata_file(path) {
             Ok(t) => t,
             Err(format::Error::Unsupported) => {
                 // Not an audio file.
@@ -323,15 +324,12 @@ fn add_to_index(db: &mut sqlite::Connection, path: &path::Path) -> Result<(), Er
                 return Ok(());
             }
         };
-        if metadata.num_samples.is_none() {
+        if meta.num_samples.is_none() {
             // A stream or a track without a known length.
             debug!("skipping (unknown length): {}", path.to_string_lossy());
             return Ok(());
         }
-        let track = MetadataTrack {
-            path: path,
-            meta: metadata,
-        };
+        let track = MetadataTrack { path, meta };
         track_upsert(db, &track)?;
         debug!("indexed {}", path.to_string_lossy());
         Ok(())
@@ -356,7 +354,7 @@ where
         .path
         .as_ref()
         .to_str()
-        .ok_or(Error::BadPath(track.path.as_ref().to_path_buf()))?;
+        .ok_or_else(|| Error::BadPath(track.path.as_ref().to_path_buf()))?;
     tx.execute(r#"
         INSERT INTO "track"
         ("path", "modified_at", "duration", "title", "rating", "release", "album_title", "album_disc", "album_track")
@@ -418,7 +416,7 @@ where
 fn track_clean_recursive(db: &sqlite::Connection, path: &path::Path) -> Result<(), Error> {
     let path_str = path
         .to_str()
-        .ok_or(Error::BadPath(path.to_path_buf()))?
+        .ok_or_else(|| Error::BadPath(path.to_path_buf()))?
         .to_string();
     db.execute(
         r#"
@@ -553,18 +551,18 @@ mod tests {
         let mut db = sqlite::Connection::open_in_memory().unwrap();
         init_db_functions(&mut db).unwrap();
         let file = "testdata/Various Artists - Dark Sine of the Moon/01 - The B-Trees - Lucy in the Cloud with Sine Waves.flac";
-        let exists =
-            db.query_row("SELECT file_exists(?1)", &[&file], |row| {
+        let exists = db
+            .query_row("SELECT file_exists(?1)", &[&file], |row| {
                 row.get::<_, bool>(0)
             }).unwrap();
         assert!(exists);
-        let non_existing =
-            db.query_row("SELECT file_exists('non_existing.file')", &[], |row| {
+        let non_existing = db
+            .query_row("SELECT file_exists('non_existing.file')", &[], |row| {
                 row.get::<_, bool>(0)
             }).unwrap();
         assert!(!non_existing);
-        let not_a_file =
-            db.query_row("SELECT file_exists('testdata')", &[], |row| {
+        let not_a_file = db
+            .query_row("SELECT file_exists('testdata')", &[], |row| {
                 row.get::<_, bool>(0)
             }).unwrap();
         assert!(!not_a_file);

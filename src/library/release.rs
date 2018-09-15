@@ -122,8 +122,7 @@ impl str::FromStr for Release {
                         _ => None,
                     });
                 y.map(|y| Release::new(y, m, d))
-            })
-            .map(|r| Ok(r))
+            }).map(Ok)
             .unwrap_or(Err(ParseError::Unmatched))
     }
 }

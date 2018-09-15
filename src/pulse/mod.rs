@@ -33,11 +33,9 @@ where
                 F::n_channels() * mem::size_of::<F::Sample>()
             );
             let mut frame: F = mem::uninitialized();
-            let buf = slice::from_raw_parts_mut(
-                mem::transmute::<&F, *mut u8>(&mut frame),
-                mem::size_of::<F>(),
-            );
-            self.conn.read(buf).unwrap();
+            let buf =
+                slice::from_raw_parts_mut(&mut frame as *mut F as *mut u8, mem::size_of::<F>());
+            self.conn.read_exact(buf);
             Some(frame)
         }
     }
@@ -62,10 +60,7 @@ where
         "source",
         rate,
         pa_stream_direction::PA_STREAM_RECORD,
-    ).map(|c| Source {
-        conn: c,
-        rate: rate,
-    })
+    ).map(|conn| Source { conn, rate })
 }
 
 pub struct Sink<F: sample::Frame> {
@@ -92,8 +87,7 @@ where
                 mem::size_of::<F>(),
                 F::n_channels() * mem::size_of::<F::Sample>()
             );
-            let buf =
-                slice::from_raw_parts(mem::transmute::<&F, *const u8>(&frame), mem::size_of::<F>());
+            let buf = slice::from_raw_parts(&frame as *const F as *const u8, mem::size_of::<F>());
             match self.conn.write(buf) {
                 // From<T> does not work well with T + Send :(
                 Ok(_) => (),
@@ -129,7 +123,7 @@ where
         pa_stream_direction::PA_STREAM_PLAYBACK,
     ).map(|c| Sink {
         conn: io::BufWriter::new(c),
-        rate: rate,
+        rate,
     })
 }
 

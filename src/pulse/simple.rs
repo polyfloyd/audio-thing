@@ -10,7 +10,7 @@ where
     assert!(F::n_channels() <= u8::MAX as usize);
     pa_sample_spec {
         format: F::Sample::sample_format(),
-        rate: rate,
+        rate,
         channels: F::n_channels() as u8,
     }
 }

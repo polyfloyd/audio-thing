@@ -151,11 +151,11 @@ impl Playback {
         Playback {
             sample_rate: source_out.sample_rate(),
             stream: output.consume(source_out, sub_handler).unwrap(),
-            flow_state: flow_state,
-            sample_counter: sample_counter,
+            flow_state,
+            sample_counter,
             tempo: None,
             seekable: None,
-            event_handler: event_handler,
+            event_handler,
         }
     }
 
@@ -185,8 +185,7 @@ impl Playback {
                 + sample::FromSample<f64>
                 + sample::FromSample<
                     <<I::Item as sample::Frame>::Float as sample::Frame>::Sample,
-                >
-                + Send
+                > + Send
                 + 'static,
         {
             let shared_seek = seek.shared();
@@ -308,11 +307,11 @@ impl Playback {
         Playback {
             sample_rate: source_out.sample_rate(),
             stream: output.consume(source_out, sub_handler).unwrap(),
-            flow_state: flow_state,
-            sample_counter: sample_counter,
+            flow_state,
+            sample_counter,
             tempo: Some(tempo),
             seekable: Some(mut_seek),
-            event_handler: event_handler,
+            event_handler,
         }
     }
 
@@ -351,7 +350,7 @@ impl Playback {
 
     /// Seeks using a duration.
     pub fn set_position_time(&mut self, timestamp: time::Duration) {
-        let secs = timestamp.as_secs() * self.sample_rate as u64;
+        let secs = timestamp.as_secs() * u64::from(self.sample_rate);
         self.set_position(secs);
     }
 
@@ -422,13 +421,13 @@ where
 
         match *state {
             State::Paused => unreachable!(),
-            State::Stopped => return None,
+            State::Stopped => None,
             State::Playing => {
                 let f = self.input.next();
                 if f.is_none() {
                     *state = State::Stopped;
                 }
-                return f;
+                f
             }
         }
     }
@@ -464,10 +463,7 @@ where
     Self::Item: sample::Frame,
 {
     fn flow_control(self, state: Arc<(Condvar, Mutex<State>)>) -> FlowControl<Self> {
-        FlowControl {
-            state: state,
-            input: self,
-        }
+        FlowControl { state, input: self }
     }
 }
 
@@ -518,7 +514,7 @@ where
 {
     fn count_samples(self, counter: Arc<Mutex<u64>>) -> SampleCounter<Self> {
         SampleCounter {
-            counter: counter,
+            counter,
             input: self,
         }
     }

@@ -71,16 +71,17 @@ fn main() {
                 let track = lines
                     .next()
                     .unwrap()
-                    .unwrap_or("q".to_string())
+                    .unwrap_or_else(|_| "q".to_string())
                     .parse()
                     .ok()
                     .and_then(|index| tracks.into_iter().nth(index));
                 if let Some(track) = track {
                     p.queue.push(library::Audio::Track(track));
-                    managed_id
-                        .as_ref()
-                        .and_then(|id| p.playing.get_mut(id))
-                        .map(|&mut (_, ref mut pb, _)| pb.set_state(player::State::Stopped));
+                    if let Some(&mut (_, ref mut pb, _)) =
+                        managed_id.as_ref().and_then(|id| p.playing.get_mut(id))
+                    {
+                        pb.set_state(player::State::Stopped)
+                    }
                     let i = p.queue.len() - 1;
                     let (id, _) = p.play_from_queue(i).unwrap().unwrap();
                     managed_id = Some(id);
@@ -129,7 +130,7 @@ fn main() {
                         "  rating:  {}",
                         info.rating()
                             .map(|r| format!("{}", r))
-                            .unwrap_or("-".to_string())
+                            .unwrap_or_else(|| "-".to_string())
                     ).unwrap();
                 }
                 if let Some(&mut (ref audio, ref mut pb, ref info)) =
@@ -138,7 +139,7 @@ fn main() {
                     let duration = pb
                         .duration_time()
                         .map(|d| format_duraton(&d))
-                        .unwrap_or("∞".to_string());
+                        .unwrap_or_else(|| "∞".to_string());
                     info.as_ref()
                         .map(|i| print_info(i.as_ref()))
                         .or_else(|| audio.track().map(print_info));
@@ -179,12 +180,12 @@ fn main() {
                 }
             }
 
-            l if l.starts_with("j") => {
+            l if l.starts_with('j') => {
                 if let Ok(i) = l[1..].parse() {
                     managed_id = p.play_from_queue(i).unwrap().map(|t| t.0);
                 }
             }
-            l if l.starts_with(":") => {
+            l if l.starts_with(':') => {
                 if let Some(&mut (_, ref mut pb, _)) =
                     managed_id.as_ref().and_then(|id| p.playing.get_mut(id))
                 {
@@ -193,7 +194,7 @@ fn main() {
                     }
                 }
             }
-            l if l.starts_with("t") => {
+            l if l.starts_with('t') => {
                 if let Some(&mut (_, ref mut pb, _)) =
                     managed_id.as_ref().and_then(|id| p.playing.get_mut(id))
                 {

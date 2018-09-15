@@ -39,8 +39,7 @@ where
             b"F" => Some(Endianness::Little),
             b"X" => Some(Endianness::Big),
             _ => None,
-        })
-        .ok_or(Error::FormatError)?;
+        }).ok_or(Error::FormatError)?;
 
     struct FmtChunk {
         audio_format: u16,
@@ -56,8 +55,8 @@ where
     // Read all chunks in the file until we reach the end.
     let mut sub_header = [0; 8];
     while input.read_exact(&mut sub_header).is_ok() {
-        let sub_size = LittleEndian::read_u32(&sub_header[4..8]) as u64;
-        let sub_data_start = input.seek(io::SeekFrom::Current(0))? as u64;
+        let sub_size = u64::from(LittleEndian::read_u32(&sub_header[4..8]));
+        let sub_data_start = input.seek(io::SeekFrom::Current(0))?;
 
         match &sub_header[0..4] {
             b"fmt " => {
@@ -122,7 +121,7 @@ where
     let meta = format::Metadata {
         sample_rate: fmt.sample_rate,
         num_samples: Some(
-            (data_range.end - data_range.start) / (fmt.num_channels * fmt.sample_size / 8) as u64,
+            (data_range.end - data_range.start) / u64::from(fmt.num_channels * fmt.sample_size / 8),
         ),
         tag: id3_tag,
     };
@@ -315,13 +314,13 @@ where
 
 impl DecodeSample<BigEndian> for I24 {
     fn decode(buf: &[u8]) -> I24 {
-        I24::new_unchecked((buf[2] as i32) | (buf[1] as i32) << 8 | (buf[0] as i32) << 16)
+        I24::new_unchecked(i32::from(buf[2]) | i32::from(buf[1]) << 8 | i32::from(buf[0]) << 16)
     }
 }
 
 impl DecodeSample<LittleEndian> for I24 {
     fn decode(buf: &[u8]) -> I24 {
-        I24::new_unchecked((buf[0] as i32) | (buf[1] as i32) << 8 | (buf[2] as i32) << 16)
+        I24::new_unchecked(i32::from(buf[0]) | i32::from(buf[1]) << 8 | i32::from(buf[2]) << 16)
     }
 }
 

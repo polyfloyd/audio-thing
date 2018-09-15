@@ -21,23 +21,20 @@ pub fn magic() -> &'static bytes::Regex {
     &MAGIC
 }
 
-unsafe fn init_decoder<R>(
-    mut input: &mut R,
-) -> Result<
-    (
-        hip_t,
-        mp3data_struct,
-        [[i16; MAX_FRAME_SIZE]; 2],
-        usize,
-        u64,
-        Option<id3::Tag>,
-    ),
-    Error,
->
+struct DecoderInit {
+    hip: hip_t,
+    mp3_data: mp3data_struct,
+    buffers: [[i16; MAX_FRAME_SIZE]; 2],
+    decode_count: usize,
+    stream_offset: u64,
+    tag: Option<id3::Tag>,
+}
+
+unsafe fn init_decoder<R>(mut input: &mut R) -> Result<DecoderInit, Error>
 where
     R: io::Read + io::Seek,
 {
-    let id3_tag = {
+    let tag = {
         let mut buf = [0; 3];
         input.read_exact(&mut buf)?;
         input.seek(io::SeekFrom::Start(0))?;
@@ -90,14 +87,14 @@ where
         return Err(Error::NoHeader);
     }
 
-    Ok((
+    Ok(DecoderInit {
         hip,
         mp3_data,
-        [buf_left, buf_right],
-        decode_count as usize,
+        buffers: [buf_left, buf_right],
+        decode_count: decode_count as usize,
         stream_offset,
-        id3_tag,
-    ))
+        tag,
+    })
 }
 
 pub fn decode_metadata<R>(mut input: R) -> Result<format::Metadata, Error>
@@ -105,21 +102,20 @@ where
     R: io::Read + io::Seek,
 {
     unsafe {
-        let (hip, mp3_data, _, _, stream_offset, id3_tag) = init_decoder(&mut input)?;
-        hip_decode_exit(hip);
-        drop(hip);
+        let init = init_decoder(&mut input)?;
+        hip_decode_exit(init.hip);
 
-        let num_samples = if mp3_data.nsamp != 0 {
-            mp3_data.nsamp
+        let num_samples = if init.mp3_data.nsamp != 0 {
+            init.mp3_data.nsamp
         } else {
-            input.seek(io::SeekFrom::Start(stream_offset))?;
+            input.seek(io::SeekFrom::Start(init.stream_offset))?;
             let frame_index = FrameIndex::read(&mut input)?;
             frame_index.num_samples()
         };
         Ok(format::Metadata {
-            sample_rate: mp3_data.samplerate as u32,
+            sample_rate: init.mp3_data.samplerate as u32,
             num_samples: Some(num_samples),
-            tag: id3_tag,
+            tag: init.tag,
         })
     }
 }
@@ -129,32 +125,31 @@ where
     R: io::Read + io::Seek + 'static,
 {
     unsafe {
-        let (hip, mp3_data, buffers, decode_count, stream_offset, id3_tag) =
-            init_decoder(&mut input)?;
-        let sample_rate = mp3_data.samplerate as u32;
-        let num_channels = mp3_data.stereo as u32;
+        let init = init_decoder(&mut input)?;
+        let sample_rate = init.mp3_data.samplerate as u32;
+        let num_channels = init.mp3_data.stereo as u32;
 
-        input.seek(io::SeekFrom::Start(stream_offset))?;
+        input.seek(io::SeekFrom::Start(init.stream_offset))?;
         let frame_index = FrameIndex::read(&mut input)?;
         input.seek(io::SeekFrom::Start(frame_index.frames[0].offset))?;
 
         let meta = format::Metadata {
-            sample_rate: sample_rate,
+            sample_rate,
             num_samples: Some(frame_index.num_samples()),
-            tag: id3_tag,
+            tag: init.tag,
         };
         macro_rules! dyn_type {
             ($dyn:path) => {
                 $dyn(Box::from(Decoder {
                     input,
                     input_buf: [0; MAX_FRAME_BYTES],
-                    hip,
+                    hip: init.hip,
                     frame_index,
                     sample_rate,
-                    buffers,
+                    buffers: init.buffers,
                     next_frame: 0,
                     next_sample: 0,
-                    samples_available: decode_count,
+                    samples_available: init.decode_count,
                     _f: marker::PhantomData,
                 })).into()
             };

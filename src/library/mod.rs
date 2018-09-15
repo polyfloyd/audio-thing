@@ -38,10 +38,9 @@ where
             match lib.borrow().find_by_id(id) {
                 Ok(Some(audio)) => Some(Ok(audio)),
                 Ok(None) => None,
-                Err(err) => Some(Err(err.into())),
+                Err(err) => Some(Err(err)),
             }
-        })
-        .collect()
+        }).collect()
 }
 
 #[derive(Clone)]
@@ -140,9 +139,9 @@ pub trait PlaylistMut: Playlist {
         let orig = self.contents()?.into_owned();
         let contents: Vec<&Identity> = orig[..position]
             .iter()
-            .map(|r| -> &Identity { r })
+            .map(|r| r as &Identity)
             .chain(audio.into_iter().map(|r| -> &Identity { r }))
-            .chain(orig[position..].iter().map(|r| -> &Identity { r }))
+            .chain(orig[position..].iter().map(|r| r as &Identity))
             .collect();
         self.set_contents(contents.as_slice())?;
         Ok(())
@@ -160,7 +159,7 @@ pub trait PlaylistMut: Playlist {
             .iter()
             .take(range.start)
             .chain(orig.iter().skip(range.end))
-            .map(|r| -> &Identity { r })
+            .map(|r| r as &Identity)
             .collect();
         self.set_contents(contents.as_slice())?;
         Ok(())
@@ -188,8 +187,8 @@ pub trait PlaylistMut: Playlist {
         } else {
             // Target position is inside the range to be moved.
             return Ok(());
-        }.map(|i| *i)
-            .collect();
+        }.cloned()
+        .collect();
         self.move_all(contents.as_slice())?;
         Ok(())
     }
@@ -212,8 +211,7 @@ pub trait PlaylistMut: Playlist {
                     return Err(PlaylistError::IndexOutOfBounds);
                 }
                 Ok(&orig[from[i]])
-            })
-            .collect::<Result<Vec<_>, _>>();
+            }).collect::<Result<Vec<_>, _>>();
         let contents = contents?;
         if contents.len() != orig.len() {
             return Err(Box::from(PlaylistError::MoveDuplicateIndices));

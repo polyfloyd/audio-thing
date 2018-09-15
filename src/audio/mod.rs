@@ -73,7 +73,7 @@ impl From<Box<error::Error>> for SeekError {
 }
 
 pub fn duration_of(sample_rate: u32, num_samples: u64) -> time::Duration {
-    let secs = num_samples / sample_rate as u64;
+    let secs = num_samples / u64::from(sample_rate);
     let nanos = (num_samples as u32 % sample_rate) * (1_000_000_000 / sample_rate);
     time::Duration::new(secs, nanos)
 }
@@ -124,7 +124,7 @@ where
     fn source(self, sample_rate: u32) -> FromIter<Self> {
         FromIter {
             signal: self,
-            sample_rate: sample_rate,
+            sample_rate,
         }
     }
 }

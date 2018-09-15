@@ -45,16 +45,16 @@ pub struct Player {
 impl Player {
     pub fn new(
         output: Box<output::Output + Send>,
-        libs: Vec<Arc<library::Library>>,
+        libraries: Vec<Arc<library::Library>>,
     ) -> Arc<Mutex<Player>> {
         let p = Arc::new(Mutex::new(Player {
             playing: BTreeMap::new(),
             gen_next_id: 0,
-            output: output,
+            output,
             queue: Vec::new(),
             queue_cursor: None,
             queue_autofill: Box::from(iter::empty()),
-            libraries: libs,
+            libraries,
             weak_self: Weak::new(),
         }));
         p.lock().unwrap().weak_self = Arc::downgrade(&p);
@@ -62,7 +62,7 @@ impl Player {
     }
 
     /// Sets up playback for the specified track. The initial state is set to paused.
-    fn init_playback(&mut self, audio: library::Audio) -> Result<(u64, &mut Playback), Error> {
+    fn init_playback(&mut self, audio: &library::Audio) -> Result<(u64, &mut Playback), Error> {
         self.gen_next_id += 1;
         let id = self.gen_next_id;
 
@@ -132,7 +132,7 @@ impl Player {
         };
         self.playing.clear();
         self.queue_cursor = Some(index);
-        let (id, pb) = self.init_playback(audio)?;
+        let (id, pb) = self.init_playback(&audio)?;
         pb.set_state(State::Playing);
         Ok(Some((id, pb)))
     }
@@ -191,7 +191,7 @@ impl library::PlaylistMut for Player {
         let resolved = library::resolve_all(&self.libraries[..], audio)?;
         if let Some(cur) = self.queue_cursor.as_mut() {
             if position < *cur {
-                *cur = *cur + audio.len();
+                *cur += audio.len();
             }
         }
         let tail = self.queue.split_off(position);
@@ -206,7 +206,7 @@ impl library::PlaylistMut for Player {
         }
         if let Some(cur) = self.queue_cursor.as_mut() {
             if *cur >= range.end {
-                *cur = *cur - range.len();
+                *cur -= range.len();
             } else if range.start <= *cur && range.end < *cur {
                 *cur = range.start;
             }
@@ -223,10 +223,9 @@ impl library::PlaylistMut for Player {
             .map(|i| {
                 self.queue
                     .get(i)
-                    .map(Clone::clone)
+                    .cloned()
                     .ok_or(library::PlaylistError::IndexOutOfBounds)
-            })
-            .collect::<Result<Vec<_>, _>>()?;
+            }).collect::<Result<Vec<_>, _>>()?;
         if self.queue.len() != new_queue.len() {
             return Err(Box::from(library::PlaylistError::MoveDuplicateIndices));
         }

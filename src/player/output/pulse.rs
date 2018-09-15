@@ -1,7 +1,7 @@
 use audio::*;
 use player::output;
 use pulse;
-use sample::{self, Frame, I24, Sample};
+use sample::{self, Frame, Sample, I24};
 use std::sync::{Arc, Mutex};
 use std::*;
 
@@ -156,7 +156,7 @@ where
         let sink = Arc::new(Mutex::new((pulse_sink, false)));
 
         let eh_sub = event_handler.clone();
-        let sub_handler = Arc::new(Mutex::new(move |event| eh_sub(event)));
+        let sub_handler = Arc::new(Mutex::new(eh_sub));
         let sink_out = sink.clone();
         thread::spawn(move || {
             for frame in source {
@@ -172,8 +172,8 @@ where
             sub_handler.lock().unwrap()(output::Event::End);
         });
         Ok(Box::new(Stream::<S> {
-            sink: sink,
-            event_handler: event_handler,
+            sink,
+            event_handler,
         }))
     }
 }

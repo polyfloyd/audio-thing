@@ -70,7 +70,7 @@ pub trait AdjustTempo: stft::Stft + Sized {
         assert!(*ratio.lock().unwrap() > 0.0);
         PhaseVocoder {
             input: self,
-            ratio: ratio,
+            ratio,
             consumption: 0.0,
             accum: collections::VecDeque::new(),
         }

@@ -34,7 +34,7 @@ pub trait Stft: iter::Iterator<Item = Vec<Vec<f64>>> + Sized {
         Inverse {
             stft: self,
             fft_plan: dft::Plan::new(dft::Operation::Inverse, window_size),
-            window_scalars: window_scalars,
+            window_scalars,
             windows: windows.into_iter().collect(),
         }
     }
@@ -63,7 +63,7 @@ where
     type Item = O;
     fn next(&mut self) -> Option<Self::Item> {
         assert_eq!(2, self.windows.len());
-        if self.windows.front().unwrap().len() == 0 {
+        if self.windows.front().unwrap().is_empty() {
             let mut blocks = self.stft.next()?;
             for block in &mut blocks {
                 dft::transform(block, &self.fft_plan);
@@ -80,8 +80,7 @@ where
                     O::Float::from_fn(|ch| {
                         <O::Sample as sample::Sample>::Float::from_sample(blocks[ch][n])
                     })
-                })
-                .collect();
+                }).collect();
             self.windows.push_back(next_window);
             self.windows.pop_front();
             // Drop the overlapping part of the previous frame.
@@ -184,8 +183,7 @@ where
                     .collect();
                 dft::transform(&mut block, &self.fft_plan);
                 block
-            })
-            .collect();
+            }).collect();
         assert_eq!(S::Item::n_channels(), blocks.len());
         Some(blocks)
     }
@@ -206,10 +204,10 @@ where
             .collect();
         FromSource {
             input: self,
-            window_size: window_size,
+            window_size,
             overlap: window_size / 2, // TODO
             fft_plan: dft::Plan::new(dft::Operation::Forward, window_size),
-            window: window,
+            window,
         }
     }
 }
