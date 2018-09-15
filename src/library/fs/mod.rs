@@ -21,9 +21,13 @@ pub struct Filesystem {
 
 impl Filesystem {
     pub fn new(root: &path::Path) -> Result<Filesystem, Error> {
-        // TODO: Instance
+        let instance_id = {
+            let mut s = collections::hash_map::DefaultHasher::new();
+            root.hash(&mut s);
+            format!("{:x}", s.finish() & 0x7fff_ffff_ffff_ffff)
+        };
         let db_path = xdg::BaseDirectories::with_prefix(env!("CARGO_PKG_NAME"))?
-            .place_cache_file("filesystem_TODO.db")?;
+            .place_cache_file(format!("filesystem_{}.db", instance_id))?;
         let db = sqlite::Connection::open(&db_path)?;
         let database_schema = include_str!("database.sql");
 
