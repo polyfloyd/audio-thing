@@ -422,7 +422,7 @@ unsafe extern "C" fn metadata_cb<R>(
     let meta = match data.meta.as_mut() {
         Some(meta) => meta,
         None => {
-            warn!("picture encountered after initialisation");
+            debug!("metadata encountered after initialisation");
             return;
         }
     };
@@ -473,13 +473,13 @@ unsafe extern "C" fn metadata_cb<R>(
                         match rs {
                             Some(c) => c,
                             None => {
-                                warn!("invalid value for rating: {}", value);
+                                debug!("invalid value for rating: {}", value);
                                 continue;
                             }
                         }
                     }),
                     unk => {
-                        warn!(
+                        debug!(
                             "could not translate \"{}\" with value \"{}\" to id3",
                             unk, value
                         );

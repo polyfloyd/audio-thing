@@ -90,7 +90,7 @@ where
             // not have to be moved.
             b"PAD " => (),
 
-            id => warn!("unknown chunk id: {}", String::from_utf8_lossy(id)),
+            id => debug!("unknown chunk id: {}", String::from_utf8_lossy(id)),
         };
 
         input.seek(io::SeekFrom::Start(sub_data_start + sub_size))?;
