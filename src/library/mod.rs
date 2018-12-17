@@ -1,4 +1,4 @@
-use audio::*;
+use crate::audio::*;
 use rand::{self, Rng};
 use std::borrow::Cow;
 use std::collections::BTreeSet;
@@ -103,7 +103,7 @@ pub trait Track: TrackInfo + Identity {
     fn modified_at(&self) -> Option<time::SystemTime>;
     /// Constructs the audiostream for this track at the earliest available sample. This method may
     /// be called multiple times during the track's lifetime.
-    fn audio(&self) -> Result<dyn::Seek, Box<error::Error>>;
+    fn audio(&self) -> Result<dynam::Seek, Box<error::Error>>;
     /// Returns the total duration of this track.
     fn duration(&self) -> time::Duration;
 }
@@ -115,7 +115,7 @@ pub trait Stream: Identity {
     fn open(
         &self,
         on_info: Arc<Fn(Option<Box<TrackInfo + Send>>)>,
-    ) -> Result<dyn::Source, Box<error::Error>>;
+    ) -> Result<dynam::Source, Box<error::Error>>;
 }
 
 pub trait Playlist {

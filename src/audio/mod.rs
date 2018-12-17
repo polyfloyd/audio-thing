@@ -2,7 +2,7 @@ use sample;
 use std::ops::{Deref, DerefMut};
 use std::*;
 
-pub mod dyn;
+pub mod dynam;
 
 pub trait Source: iter::Iterator
 where

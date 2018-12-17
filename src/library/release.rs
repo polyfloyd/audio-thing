@@ -2,6 +2,7 @@ use regex::Regex;
 use rusqlite as sqlite;
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, Value, ValueRef};
 use std::*;
+use lazy_static::lazy_static;
 
 /// When a track or album has been released. The items of this enum indicate the level of
 /// precision.

@@ -1,6 +1,6 @@
-use audio::*;
-use filter::*;
-use player::output;
+use crate::audio::*;
+use crate::filter::*;
+use crate::player::output;
 use sample;
 use std::sync::{Arc, Condvar, Mutex};
 use std::*;
@@ -37,18 +37,18 @@ impl Playback {
     /// Initializes a new Playback. Playback should be started manually by setting the playstate to
     /// Playing.
     pub fn new(
-        audio: dyn::Audio,
+        audio: dynam::Audio,
         output: &output::Output,
         event_handler: Arc<Fn(Event) + Send + Sync>,
     ) -> Playback {
         match audio {
-            dyn::Audio::Source(source) => Playback::from_source(source, output, event_handler),
-            dyn::Audio::Seek(seek) => Playback::from_seek(seek, output, event_handler),
+            dynam::Audio::Source(source) => Playback::from_source(source, output, event_handler),
+            dynam::Audio::Seek(seek) => Playback::from_seek(seek, output, event_handler),
         }
     }
 
     fn from_source(
-        source: dyn::Source,
+        source: dynam::Source,
         output: &output::Output,
         event_handler: Arc<Fn(Event) + Send + Sync>,
     ) -> Playback {
@@ -67,77 +67,77 @@ impl Playback {
             Box::from(source.flow_control(fs.clone()).count_samples(sc.clone()))
         }
         let source_out = match source {
-            dyn::Source::MonoI8(s) => {
-                dyn::Source::MonoI8(with_control(s, &flow_state, &sample_counter))
+            dynam::Source::MonoI8(s) => {
+                dynam::Source::MonoI8(with_control(s, &flow_state, &sample_counter))
             }
-            dyn::Source::MonoU8(s) => {
-                dyn::Source::MonoU8(with_control(s, &flow_state, &sample_counter))
+            dynam::Source::MonoU8(s) => {
+                dynam::Source::MonoU8(with_control(s, &flow_state, &sample_counter))
             }
-            dyn::Source::MonoI16(s) => {
-                dyn::Source::MonoI16(with_control(s, &flow_state, &sample_counter))
+            dynam::Source::MonoI16(s) => {
+                dynam::Source::MonoI16(with_control(s, &flow_state, &sample_counter))
             }
-            dyn::Source::MonoU16(s) => {
-                dyn::Source::MonoU16(with_control(s, &flow_state, &sample_counter))
+            dynam::Source::MonoU16(s) => {
+                dynam::Source::MonoU16(with_control(s, &flow_state, &sample_counter))
             }
-            dyn::Source::MonoI24(s) => {
-                dyn::Source::MonoI24(with_control(s, &flow_state, &sample_counter))
+            dynam::Source::MonoI24(s) => {
+                dynam::Source::MonoI24(with_control(s, &flow_state, &sample_counter))
             }
-            dyn::Source::MonoU24(s) => {
-                dyn::Source::MonoU24(with_control(s, &flow_state, &sample_counter))
+            dynam::Source::MonoU24(s) => {
+                dynam::Source::MonoU24(with_control(s, &flow_state, &sample_counter))
             }
-            dyn::Source::MonoI32(s) => {
-                dyn::Source::MonoI32(with_control(s, &flow_state, &sample_counter))
+            dynam::Source::MonoI32(s) => {
+                dynam::Source::MonoI32(with_control(s, &flow_state, &sample_counter))
             }
-            dyn::Source::MonoU32(s) => {
-                dyn::Source::MonoU32(with_control(s, &flow_state, &sample_counter))
+            dynam::Source::MonoU32(s) => {
+                dynam::Source::MonoU32(with_control(s, &flow_state, &sample_counter))
             }
-            dyn::Source::MonoI64(s) => {
-                dyn::Source::MonoI64(with_control(s, &flow_state, &sample_counter))
+            dynam::Source::MonoI64(s) => {
+                dynam::Source::MonoI64(with_control(s, &flow_state, &sample_counter))
             }
-            dyn::Source::MonoU64(s) => {
-                dyn::Source::MonoU64(with_control(s, &flow_state, &sample_counter))
+            dynam::Source::MonoU64(s) => {
+                dynam::Source::MonoU64(with_control(s, &flow_state, &sample_counter))
             }
-            dyn::Source::MonoF32(s) => {
-                dyn::Source::MonoF32(with_control(s, &flow_state, &sample_counter))
+            dynam::Source::MonoF32(s) => {
+                dynam::Source::MonoF32(with_control(s, &flow_state, &sample_counter))
             }
-            dyn::Source::MonoF64(s) => {
-                dyn::Source::MonoF64(with_control(s, &flow_state, &sample_counter))
+            dynam::Source::MonoF64(s) => {
+                dynam::Source::MonoF64(with_control(s, &flow_state, &sample_counter))
             }
-            dyn::Source::StereoI8(s) => {
-                dyn::Source::StereoI8(with_control(s, &flow_state, &sample_counter))
+            dynam::Source::StereoI8(s) => {
+                dynam::Source::StereoI8(with_control(s, &flow_state, &sample_counter))
             }
-            dyn::Source::StereoU8(s) => {
-                dyn::Source::StereoU8(with_control(s, &flow_state, &sample_counter))
+            dynam::Source::StereoU8(s) => {
+                dynam::Source::StereoU8(with_control(s, &flow_state, &sample_counter))
             }
-            dyn::Source::StereoI16(s) => {
-                dyn::Source::StereoI16(with_control(s, &flow_state, &sample_counter))
+            dynam::Source::StereoI16(s) => {
+                dynam::Source::StereoI16(with_control(s, &flow_state, &sample_counter))
             }
-            dyn::Source::StereoU16(s) => {
-                dyn::Source::StereoU16(with_control(s, &flow_state, &sample_counter))
+            dynam::Source::StereoU16(s) => {
+                dynam::Source::StereoU16(with_control(s, &flow_state, &sample_counter))
             }
-            dyn::Source::StereoI24(s) => {
-                dyn::Source::StereoI24(with_control(s, &flow_state, &sample_counter))
+            dynam::Source::StereoI24(s) => {
+                dynam::Source::StereoI24(with_control(s, &flow_state, &sample_counter))
             }
-            dyn::Source::StereoU24(s) => {
-                dyn::Source::StereoU24(with_control(s, &flow_state, &sample_counter))
+            dynam::Source::StereoU24(s) => {
+                dynam::Source::StereoU24(with_control(s, &flow_state, &sample_counter))
             }
-            dyn::Source::StereoI32(s) => {
-                dyn::Source::StereoI32(with_control(s, &flow_state, &sample_counter))
+            dynam::Source::StereoI32(s) => {
+                dynam::Source::StereoI32(with_control(s, &flow_state, &sample_counter))
             }
-            dyn::Source::StereoU32(s) => {
-                dyn::Source::StereoU32(with_control(s, &flow_state, &sample_counter))
+            dynam::Source::StereoU32(s) => {
+                dynam::Source::StereoU32(with_control(s, &flow_state, &sample_counter))
             }
-            dyn::Source::StereoI64(s) => {
-                dyn::Source::StereoI64(with_control(s, &flow_state, &sample_counter))
+            dynam::Source::StereoI64(s) => {
+                dynam::Source::StereoI64(with_control(s, &flow_state, &sample_counter))
             }
-            dyn::Source::StereoU64(s) => {
-                dyn::Source::StereoU64(with_control(s, &flow_state, &sample_counter))
+            dynam::Source::StereoU64(s) => {
+                dynam::Source::StereoU64(with_control(s, &flow_state, &sample_counter))
             }
-            dyn::Source::StereoF32(s) => {
-                dyn::Source::StereoF32(with_control(s, &flow_state, &sample_counter))
+            dynam::Source::StereoF32(s) => {
+                dynam::Source::StereoF32(with_control(s, &flow_state, &sample_counter))
             }
-            dyn::Source::StereoF64(s) => {
-                dyn::Source::StereoF64(with_control(s, &flow_state, &sample_counter))
+            dynam::Source::StereoF64(s) => {
+                dynam::Source::StereoF64(with_control(s, &flow_state, &sample_counter))
             }
         };
 
@@ -160,7 +160,7 @@ impl Playback {
     }
 
     fn from_seek(
-        seek: dyn::Seek,
+        seek: dynam::Seek,
         output: &output::Output,
         event_handler: Arc<Fn(Event) + Send + Sync>,
     ) -> Playback {
@@ -199,101 +199,101 @@ impl Playback {
             (Box::from(source_out), mut_seek)
         }
         let (source_out, mut_seek) = match seek {
-            dyn::Seek::MonoI8(s) => {
+            dynam::Seek::MonoI8(s) => {
                 let (o, m) = with_control(s, &flow_state, &sample_counter, &tempo);
-                (dyn::Source::MonoI8(o), m)
+                (dynam::Source::MonoI8(o), m)
             }
-            dyn::Seek::MonoU8(s) => {
+            dynam::Seek::MonoU8(s) => {
                 let (o, m) = with_control(s, &flow_state, &sample_counter, &tempo);
-                (dyn::Source::MonoU8(o), m)
+                (dynam::Source::MonoU8(o), m)
             }
-            dyn::Seek::MonoI16(s) => {
+            dynam::Seek::MonoI16(s) => {
                 let (o, m) = with_control(s, &flow_state, &sample_counter, &tempo);
-                (dyn::Source::MonoI16(o), m)
+                (dynam::Source::MonoI16(o), m)
             }
-            dyn::Seek::MonoU16(s) => {
+            dynam::Seek::MonoU16(s) => {
                 let (o, m) = with_control(s, &flow_state, &sample_counter, &tempo);
-                (dyn::Source::MonoU16(o), m)
+                (dynam::Source::MonoU16(o), m)
             }
-            dyn::Seek::MonoI24(s) => {
+            dynam::Seek::MonoI24(s) => {
                 let (o, m) = with_control(s, &flow_state, &sample_counter, &tempo);
-                (dyn::Source::MonoI24(o), m)
+                (dynam::Source::MonoI24(o), m)
             }
-            dyn::Seek::MonoU24(s) => {
+            dynam::Seek::MonoU24(s) => {
                 let (o, m) = with_control(s, &flow_state, &sample_counter, &tempo);
-                (dyn::Source::MonoU24(o), m)
+                (dynam::Source::MonoU24(o), m)
             }
-            dyn::Seek::MonoI32(s) => {
+            dynam::Seek::MonoI32(s) => {
                 let (o, m) = with_control(s, &flow_state, &sample_counter, &tempo);
-                (dyn::Source::MonoI32(o), m)
+                (dynam::Source::MonoI32(o), m)
             }
-            dyn::Seek::MonoU32(s) => {
+            dynam::Seek::MonoU32(s) => {
                 let (o, m) = with_control(s, &flow_state, &sample_counter, &tempo);
-                (dyn::Source::MonoU32(o), m)
+                (dynam::Source::MonoU32(o), m)
             }
-            dyn::Seek::MonoI64(s) => {
+            dynam::Seek::MonoI64(s) => {
                 let (o, m) = with_control(s, &flow_state, &sample_counter, &tempo);
-                (dyn::Source::MonoI64(o), m)
+                (dynam::Source::MonoI64(o), m)
             }
-            dyn::Seek::MonoU64(s) => {
+            dynam::Seek::MonoU64(s) => {
                 let (o, m) = with_control(s, &flow_state, &sample_counter, &tempo);
-                (dyn::Source::MonoU64(o), m)
+                (dynam::Source::MonoU64(o), m)
             }
-            dyn::Seek::MonoF32(s) => {
+            dynam::Seek::MonoF32(s) => {
                 let (o, m) = with_control(s, &flow_state, &sample_counter, &tempo);
-                (dyn::Source::MonoF32(o), m)
+                (dynam::Source::MonoF32(o), m)
             }
-            dyn::Seek::MonoF64(s) => {
+            dynam::Seek::MonoF64(s) => {
                 let (o, m) = with_control(s, &flow_state, &sample_counter, &tempo);
-                (dyn::Source::MonoF64(o), m)
+                (dynam::Source::MonoF64(o), m)
             }
-            dyn::Seek::StereoI8(s) => {
+            dynam::Seek::StereoI8(s) => {
                 let (o, m) = with_control(s, &flow_state, &sample_counter, &tempo);
-                (dyn::Source::StereoI8(o), m)
+                (dynam::Source::StereoI8(o), m)
             }
-            dyn::Seek::StereoU8(s) => {
+            dynam::Seek::StereoU8(s) => {
                 let (o, m) = with_control(s, &flow_state, &sample_counter, &tempo);
-                (dyn::Source::StereoU8(o), m)
+                (dynam::Source::StereoU8(o), m)
             }
-            dyn::Seek::StereoI16(s) => {
+            dynam::Seek::StereoI16(s) => {
                 let (o, m) = with_control(s, &flow_state, &sample_counter, &tempo);
-                (dyn::Source::StereoI16(o), m)
+                (dynam::Source::StereoI16(o), m)
             }
-            dyn::Seek::StereoU16(s) => {
+            dynam::Seek::StereoU16(s) => {
                 let (o, m) = with_control(s, &flow_state, &sample_counter, &tempo);
-                (dyn::Source::StereoU16(o), m)
+                (dynam::Source::StereoU16(o), m)
             }
-            dyn::Seek::StereoI24(s) => {
+            dynam::Seek::StereoI24(s) => {
                 let (o, m) = with_control(s, &flow_state, &sample_counter, &tempo);
-                (dyn::Source::StereoI24(o), m)
+                (dynam::Source::StereoI24(o), m)
             }
-            dyn::Seek::StereoU24(s) => {
+            dynam::Seek::StereoU24(s) => {
                 let (o, m) = with_control(s, &flow_state, &sample_counter, &tempo);
-                (dyn::Source::StereoU24(o), m)
+                (dynam::Source::StereoU24(o), m)
             }
-            dyn::Seek::StereoI32(s) => {
+            dynam::Seek::StereoI32(s) => {
                 let (o, m) = with_control(s, &flow_state, &sample_counter, &tempo);
-                (dyn::Source::StereoI32(o), m)
+                (dynam::Source::StereoI32(o), m)
             }
-            dyn::Seek::StereoU32(s) => {
+            dynam::Seek::StereoU32(s) => {
                 let (o, m) = with_control(s, &flow_state, &sample_counter, &tempo);
-                (dyn::Source::StereoU32(o), m)
+                (dynam::Source::StereoU32(o), m)
             }
-            dyn::Seek::StereoI64(s) => {
+            dynam::Seek::StereoI64(s) => {
                 let (o, m) = with_control(s, &flow_state, &sample_counter, &tempo);
-                (dyn::Source::StereoI64(o), m)
+                (dynam::Source::StereoI64(o), m)
             }
-            dyn::Seek::StereoU64(s) => {
+            dynam::Seek::StereoU64(s) => {
                 let (o, m) = with_control(s, &flow_state, &sample_counter, &tempo);
-                (dyn::Source::StereoU64(o), m)
+                (dynam::Source::StereoU64(o), m)
             }
-            dyn::Seek::StereoF32(s) => {
+            dynam::Seek::StereoF32(s) => {
                 let (o, m) = with_control(s, &flow_state, &sample_counter, &tempo);
-                (dyn::Source::StereoF32(o), m)
+                (dynam::Source::StereoF32(o), m)
             }
-            dyn::Seek::StereoF64(s) => {
+            dynam::Seek::StereoF64(s) => {
                 let (o, m) = with_control(s, &flow_state, &sample_counter, &tempo);
-                (dyn::Source::StereoF64(o), m)
+                (dynam::Source::StereoF64(o), m)
             }
         };
 

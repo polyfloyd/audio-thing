@@ -1,5 +1,5 @@
-use format;
-use library::{self, Library, Track, TrackInfo};
+use crate::format;
+use crate::library::{self, Library, Track, TrackInfo};
 use notify::{self, Watcher};
 use rusqlite as sqlite;
 use std::borrow::Cow;
@@ -7,6 +7,7 @@ use std::hash::{Hash, Hasher};
 use std::sync::mpsc;
 use std::*;
 use xdg;
+use log::*;
 
 mod playlist;
 mod track;
@@ -532,7 +533,7 @@ impl From<xdg::BaseDirectoriesError> for Error {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use library::{Library, Playlist};
+    use crate::library::{Library, Playlist};
     use std::sync::{Arc, Mutex};
 
     const ALBUM: &'static str = "testdata/Various Artists - Dark Sine of the Moon";

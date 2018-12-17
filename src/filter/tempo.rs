@@ -1,4 +1,4 @@
-use filter::stft;
+use crate::filter::stft;
 use std::*;
 
 pub struct PhaseVocoder<S>

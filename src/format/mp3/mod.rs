@@ -1,10 +1,12 @@
-use audio::*;
-use format;
+use crate::audio::*;
+use crate::format;
 use id3;
 use liblame_sys::*;
 use regex::bytes;
 use sample;
 use std::*;
+use log::*;
+use lazy_static::lazy_static;
 
 mod index;
 use self::index::FrameIndex;
@@ -120,7 +122,7 @@ where
     }
 }
 
-pub fn decode<R>(mut input: R) -> Result<(dyn::Audio, format::Metadata), Error>
+pub fn decode<R>(mut input: R) -> Result<(dynam::Audio, format::Metadata), Error>
 where
     R: io::Read + io::Seek + 'static,
 {
@@ -156,8 +158,8 @@ where
         }
         Ok((
             match num_channels {
-                1 => dyn_type!(dyn::Seek::MonoI16),
-                2 => dyn_type!(dyn::Seek::StereoI16),
+                1 => dyn_type!(dynam::Seek::MonoI16),
+                2 => dyn_type!(dynam::Seek::StereoI16),
                 _ => unreachable!(), // LAME's interface does not allow this.
             },
             meta,

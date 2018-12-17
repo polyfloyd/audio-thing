@@ -1,11 +1,12 @@
-use audio::*;
-use format;
+use crate::audio::*;
+use crate::format;
 use id3;
 use libflac_sys::*;
 use sample::{self, I24};
 use std::borrow::Cow;
 use std::ops::DerefMut;
 use std::*;
+use log::*;
 
 pub const MAGIC: &[u8] = b"fLaC";
 
@@ -33,7 +34,7 @@ struct DecoderCallbackData<R> {
     meta: Option<format::Metadata>,
 }
 
-pub fn decode<R>(input: R) -> Result<(dyn::Audio, format::Metadata), Error>
+pub fn decode<R>(input: R) -> Result<(dynam::Audio, format::Metadata), Error>
 where
     R: io::Read + io::Seek + SeekExt + 'static,
 {
@@ -116,18 +117,18 @@ where
         let meta = cb_data.meta.take().unwrap();
         Ok((
             match (length != 0, num_channels, sample_size) {
-                (false, 1, 8) => dyn_type!(dyn::Source::MonoI8),
-                (false, 1, 16) => dyn_type!(dyn::Source::MonoI16),
-                (false, 1, 24) => dyn_type!(dyn::Source::MonoI24),
-                (false, 2, 8) => dyn_type!(dyn::Source::StereoI8),
-                (false, 2, 16) => dyn_type!(dyn::Source::StereoI16),
-                (false, 2, 24) => dyn_type!(dyn::Source::StereoI24),
-                (true, 1, 8) => dyn_type!(dyn::Seek::MonoI8),
-                (true, 1, 16) => dyn_type!(dyn::Seek::MonoI16),
-                (true, 1, 24) => dyn_type!(dyn::Seek::MonoI24),
-                (true, 2, 8) => dyn_type!(dyn::Seek::StereoI8),
-                (true, 2, 16) => dyn_type!(dyn::Seek::StereoI16),
-                (true, 2, 24) => dyn_type!(dyn::Seek::StereoI24),
+                (false, 1, 8) => dyn_type!(dynam::Source::MonoI8),
+                (false, 1, 16) => dyn_type!(dynam::Source::MonoI16),
+                (false, 1, 24) => dyn_type!(dynam::Source::MonoI24),
+                (false, 2, 8) => dyn_type!(dynam::Source::StereoI8),
+                (false, 2, 16) => dyn_type!(dynam::Source::StereoI16),
+                (false, 2, 24) => dyn_type!(dynam::Source::StereoI24),
+                (true, 1, 8) => dyn_type!(dynam::Seek::MonoI8),
+                (true, 1, 16) => dyn_type!(dynam::Seek::MonoI16),
+                (true, 1, 24) => dyn_type!(dynam::Seek::MonoI24),
+                (true, 2, 8) => dyn_type!(dynam::Seek::StereoI8),
+                (true, 2, 16) => dyn_type!(dynam::Seek::StereoI16),
+                (true, 2, 24) => dyn_type!(dynam::Seek::StereoI24),
                 (kl, nc, ss) => {
                     return Err(Error::Unimplemented {
                         known_length: kl,

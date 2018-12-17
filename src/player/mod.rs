@@ -1,9 +1,10 @@
-use audio::*;
-use library;
+use crate::audio::*;
+use crate::library;
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, Weak};
 use std::*;
+use log::*;
 
 pub mod output;
 pub mod playback;
@@ -67,7 +68,7 @@ impl Player {
         let id = self.gen_next_id;
 
         let weak = self.weak_self.clone();
-        let signal: dyn::Audio = match audio {
+        let signal: dynam::Audio = match audio {
             library::Audio::Track(ref track) => track.audio()?.into(),
             library::Audio::Stream(ref stream) => {
                 let on_info = Arc::new(move |info| {

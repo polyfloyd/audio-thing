@@ -1,6 +1,7 @@
 [package]
 name = "audio-thing"
 version = "0.1.0"
+edition = "2018"
 authors = ["polyfloyd <floyd@polyfloyd.net>"]
 publish = false
 
@@ -27,3 +28,10 @@ xdg = "2.1.0"
 libflac_sys = { path = "libflac_sys" }
 liblame_sys = { path = "liblame_sys" }
 libpulse_sys = { path = "libpulse_sys" }
+
+[workspace]
+members = [
+	"libflac_sys",
+	"liblame_sys",
+	"libpulse_sys",
+]

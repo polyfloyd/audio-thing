@@ -1,26 +1,10 @@
 #![cfg_attr(all(test, feature = "unstable"), feature(test))]
 #![allow(unused)]
 
-extern crate badlog;
-extern crate byteorder;
 #[macro_use]
 extern crate derive_error;
-extern crate dft;
-extern crate id3;
-#[macro_use]
-extern crate lazy_static;
-#[macro_use]
-extern crate log;
-extern crate libflac_sys;
-extern crate liblame_sys;
-extern crate libpulse_sys;
-extern crate notify;
-extern crate rand;
-extern crate regex;
-extern crate rusqlite;
-extern crate sample;
-extern crate xdg;
-use library::Library;
+
+use crate::library::Library;
 use std::io::{BufRead, Write};
 use std::*;
 

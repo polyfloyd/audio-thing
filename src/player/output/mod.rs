@@ -1,4 +1,4 @@
-use audio::*;
+use crate::audio::*;
 use std::sync::Arc;
 use std::*;
 
@@ -20,7 +20,7 @@ pub trait Output: Send {
     /// The implementation should take into account that the source may block at any given moment.
     fn consume(
         &self,
-        source: dyn::Source,
+        source: dynam::Source,
         event_handler: Arc<Fn(Event) + Send + Sync>,
     ) -> Result<Box<Stream>, Box<error::Error>>;
 }

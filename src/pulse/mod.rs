@@ -1,4 +1,4 @@
-use audio;
+use crate::audio;
 use libpulse_sys::*;
 use sample;
 use std::io::{Read, Write};

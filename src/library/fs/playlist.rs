@@ -1,5 +1,5 @@
-use library::fs::*;
-use library::{self, Identity};
+use crate::library::fs::*;
+use crate::library::{self, Identity};
 use std::borrow::Cow;
 use std::io::BufRead;
 use std::io::Write;

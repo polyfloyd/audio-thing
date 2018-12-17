@@ -1,10 +1,11 @@
 use super::Error;
-use audio::*;
-use format;
-use library;
+use crate::audio::*;
+use crate::format;
+use crate::library;
 use regex::Regex;
 use std::borrow::Cow;
 use std::*;
+use lazy_static::lazy_static;
 
 pub struct RawTrack {
     pub path: String,
@@ -76,7 +77,7 @@ impl library::Track for RawTrack {
         Some(self.modified_at)
     }
 
-    fn audio(&self) -> Result<dyn::Seek, Box<error::Error>> {
+    fn audio(&self) -> Result<dynam::Seek, Box<error::Error>> {
         let (decoder, _) = format::decode_file(path::Path::new(&self.path))?;
         decoder.into_seek().ok_or_else(|| Box::from(Error::NonSeek))
     }
@@ -247,7 +248,7 @@ where
             .ok()
     }
 
-    fn audio(&self) -> Result<dyn::Seek, Box<error::Error>> {
+    fn audio(&self) -> Result<dynam::Seek, Box<error::Error>> {
         let (decoder, _) = format::decode_file(&self.path)?;
         decoder.into_seek().ok_or_else(|| Box::from(Error::NonSeek))
     }
@@ -262,7 +263,7 @@ where
 mod tests {
     use super::*;
     use id3;
-    use library::TrackInfo;
+    use crate::library::TrackInfo;
 
     #[test]
     fn test_tags() {

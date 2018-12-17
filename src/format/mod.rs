@@ -1,4 +1,4 @@
-use audio::*;
+use crate::audio::*;
 use id3;
 use std::io::{Read, Seek};
 use std::*;
@@ -53,7 +53,7 @@ where
     }
 }
 
-pub fn decode_file<P>(path: P) -> Result<(dyn::Audio, Metadata), Error>
+pub fn decode_file<P>(path: P) -> Result<(dynam::Audio, Metadata), Error>
 where
     P: AsRef<path::Path>,
 {

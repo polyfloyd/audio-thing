@@ -3,7 +3,7 @@
 //! http://eeweb.poly.edu/iselesni/EL713/STFT/stft_inverse.pdf
 //!
 
-use audio;
+use crate::audio;
 use dft;
 use sample::{self, Frame, Sample};
 use std::*;

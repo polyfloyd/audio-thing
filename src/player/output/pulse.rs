@@ -1,6 +1,6 @@
-use audio::*;
-use player::output;
-use pulse;
+use crate::audio::*;
+use crate::player::output;
+use crate::pulse;
 use sample::{self, Frame, Sample, I24};
 use std::sync::{Arc, Mutex};
 use std::*;
@@ -10,112 +10,112 @@ pub struct Output();
 impl super::Output for Output {
     fn consume(
         &self,
-        source: dyn::Source,
+        source: dynam::Source,
         eh: Arc<Fn(output::Event) + Send + Sync>,
     ) -> Result<Box<super::Stream>, Box<error::Error>> {
         let sr = source.sample_rate();
         // Pulseaudio does not support too many formats, so we coerce the sample format when
         // needed.
         match source {
-            dyn::Source::MonoI8(source) => Stream::new(
+            dynam::Source::MonoI8(source) => Stream::new(
                 source
                     .map(|f| -> [u8; 1] { f.map(Sample::from_sample) })
                     .source(sr),
                 eh,
             ),
-            dyn::Source::MonoU8(source) => Stream::new(source, eh),
-            dyn::Source::MonoI16(source) => Stream::new(source, eh),
-            dyn::Source::MonoU16(source) => Stream::new(
+            dynam::Source::MonoU8(source) => Stream::new(source, eh),
+            dynam::Source::MonoI16(source) => Stream::new(source, eh),
+            dynam::Source::MonoU16(source) => Stream::new(
                 source
                     .map(|f| -> [i16; 1] { f.map(Sample::from_sample) })
                     .source(sr),
                 eh,
             ),
-            dyn::Source::MonoI24(source) => Stream::new(source, eh),
-            dyn::Source::MonoU24(source) => Stream::new(
+            dynam::Source::MonoI24(source) => Stream::new(source, eh),
+            dynam::Source::MonoU24(source) => Stream::new(
                 source
                     .map(|f| -> [I24; 1] { f.map(Sample::from_sample) })
                     .source(sr),
                 eh,
             ),
-            dyn::Source::MonoI32(source) => Stream::new(
+            dynam::Source::MonoI32(source) => Stream::new(
                 source
                     .map(|f| -> [f32; 1] { f.map(Sample::from_sample) })
                     .source(sr),
                 eh,
             ),
-            dyn::Source::MonoU32(source) => Stream::new(
+            dynam::Source::MonoU32(source) => Stream::new(
                 source
                     .map(|f| -> [f32; 1] { f.map(Sample::from_sample) })
                     .source(sr),
                 eh,
             ),
-            dyn::Source::MonoI64(source) => Stream::new(
+            dynam::Source::MonoI64(source) => Stream::new(
                 source
                     .map(|f| -> [f32; 1] { f.map(Sample::from_sample) })
                     .source(sr),
                 eh,
             ),
-            dyn::Source::MonoU64(source) => Stream::new(
+            dynam::Source::MonoU64(source) => Stream::new(
                 source
                     .map(|f| -> [f32; 1] { f.map(Sample::from_sample) })
                     .source(sr),
                 eh,
             ),
-            dyn::Source::MonoF32(source) => Stream::new(source, eh),
-            dyn::Source::MonoF64(source) => Stream::new(
+            dynam::Source::MonoF32(source) => Stream::new(source, eh),
+            dynam::Source::MonoF64(source) => Stream::new(
                 source
                     .map(|f| -> [f32; 1] { f.map(Sample::from_sample) })
                     .source(sr),
                 eh,
             ),
-            dyn::Source::StereoI8(source) => Stream::new(
+            dynam::Source::StereoI8(source) => Stream::new(
                 source
                     .map(|f| -> [u8; 2] { f.map(Sample::from_sample) })
                     .source(sr),
                 eh,
             ),
-            dyn::Source::StereoU8(source) => Stream::new(source, eh),
-            dyn::Source::StereoI16(source) => Stream::new(source, eh),
-            dyn::Source::StereoU16(source) => Stream::new(
+            dynam::Source::StereoU8(source) => Stream::new(source, eh),
+            dynam::Source::StereoI16(source) => Stream::new(source, eh),
+            dynam::Source::StereoU16(source) => Stream::new(
                 source
                     .map(|f| -> [i16; 2] { f.map(Sample::from_sample) })
                     .source(sr),
                 eh,
             ),
-            dyn::Source::StereoI24(source) => Stream::new(source, eh),
-            dyn::Source::StereoU24(source) => Stream::new(
+            dynam::Source::StereoI24(source) => Stream::new(source, eh),
+            dynam::Source::StereoU24(source) => Stream::new(
                 source
                     .map(|f| -> [I24; 2] { f.map(Sample::from_sample) })
                     .source(sr),
                 eh,
             ),
-            dyn::Source::StereoI32(source) => Stream::new(
+            dynam::Source::StereoI32(source) => Stream::new(
                 source
                     .map(|f| -> [f32; 2] { f.map(Sample::from_sample) })
                     .source(sr),
                 eh,
             ),
-            dyn::Source::StereoU32(source) => Stream::new(
+            dynam::Source::StereoU32(source) => Stream::new(
                 source
                     .map(|f| -> [f32; 2] { f.map(Sample::from_sample) })
                     .source(sr),
                 eh,
             ),
-            dyn::Source::StereoI64(source) => Stream::new(
+            dynam::Source::StereoI64(source) => Stream::new(
                 source
                     .map(|f| -> [f32; 2] { f.map(Sample::from_sample) })
                     .source(sr),
                 eh,
             ),
-            dyn::Source::StereoU64(source) => Stream::new(
+            dynam::Source::StereoU64(source) => Stream::new(
                 source
                     .map(|f| -> [f32; 2] { f.map(Sample::from_sample) })
                     .source(sr),
                 eh,
             ),
-            dyn::Source::StereoF32(source) => Stream::new(source, eh),
-            dyn::Source::StereoF64(source) => Stream::new(
+            dynam::Source::StereoF32(source) => Stream::new(source, eh),
+            dynam::Source::StereoF64(source) => Stream::new(
                 source
                     .map(|f| -> [f32; 2] { f.map(Sample::from_sample) })
                     .source(sr),

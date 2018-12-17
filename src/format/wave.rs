@@ -1,10 +1,12 @@
-use audio::*;
+use crate::audio::*;
 use byteorder::{BigEndian, ByteOrder, LittleEndian};
-use format;
+use crate::format;
 use id3;
+use log::*;
 use regex::bytes;
 use sample::{self, I24};
 use std::*;
+use lazy_static::lazy_static;
 
 pub fn magic() -> &'static bytes::Regex {
     lazy_static! {
@@ -25,7 +27,7 @@ enum Format {
     Float,
 }
 
-pub fn decode<R>(mut input: R) -> Result<(dyn::Audio, format::Metadata), Error>
+pub fn decode<R>(mut input: R) -> Result<(dynam::Audio, format::Metadata), Error>
 where
     R: io::Read + io::Seek + Send + 'static,
 {
@@ -142,21 +144,21 @@ where
     }
     Ok((
         match (fmt.num_channels, fmt.sample_size, audio_format, endianness) {
-            (1, 8, Format::Int, Endianness::Little) => dyn_type!(dyn::Seek::MonoU8, LittleEndian),
-            (1, 16, Format::Int, Endianness::Little) => dyn_type!(dyn::Seek::MonoI16, LittleEndian),
-            (1, 24, Format::Int, Endianness::Little) => dyn_type!(dyn::Seek::MonoI24, LittleEndian),
+            (1, 8, Format::Int, Endianness::Little) => dyn_type!(dynam::Seek::MonoU8, LittleEndian),
+            (1, 16, Format::Int, Endianness::Little) => dyn_type!(dynam::Seek::MonoI16, LittleEndian),
+            (1, 24, Format::Int, Endianness::Little) => dyn_type!(dynam::Seek::MonoI24, LittleEndian),
             (1, 32, Format::Float, Endianness::Little) => {
-                dyn_type!(dyn::Seek::MonoF32, LittleEndian)
+                dyn_type!(dynam::Seek::MonoF32, LittleEndian)
             }
-            (2, 8, Format::Int, Endianness::Little) => dyn_type!(dyn::Seek::StereoU8, LittleEndian),
+            (2, 8, Format::Int, Endianness::Little) => dyn_type!(dynam::Seek::StereoU8, LittleEndian),
             (2, 16, Format::Int, Endianness::Little) => {
-                dyn_type!(dyn::Seek::StereoI16, LittleEndian)
+                dyn_type!(dynam::Seek::StereoI16, LittleEndian)
             }
             (2, 24, Format::Int, Endianness::Little) => {
-                dyn_type!(dyn::Seek::StereoI24, LittleEndian)
+                dyn_type!(dynam::Seek::StereoI24, LittleEndian)
             }
             (2, 32, Format::Float, Endianness::Little) => {
-                dyn_type!(dyn::Seek::StereoF32, LittleEndian)
+                dyn_type!(dynam::Seek::StereoF32, LittleEndian)
             }
             (nc, ss, _, end) => {
                 return Err(Error::Unimplemented {

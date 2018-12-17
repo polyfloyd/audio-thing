@@ -35,8 +35,8 @@ where
         dir: pa_stream_direction,
     ) -> Result<Connection<F>, Box<error::Error>> {
         let s = unsafe {
-            let c_app_name = try!(ffi::CString::new(app_name));
-            let c_stream_name = try!(ffi::CString::new(stream_name));
+            let c_app_name = ffi::CString::new(app_name)?;
+            let c_stream_name = ffi::CString::new(stream_name)?;
             let mut err_code = pa_error_code::PA_OK;
             let s = pa_simple_new(
                 ptr::null(), // Use the default server.
