@@ -1,8 +1,8 @@
+use lazy_static::lazy_static;
 use regex::Regex;
 use rusqlite as sqlite;
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, Value, ValueRef};
 use std::*;
-use lazy_static::lazy_static;
 
 /// When a track or album has been released. The items of this enum indicate the level of
 /// precision.
@@ -88,7 +88,8 @@ impl str::FromStr for Release {
                 )?
                 (?P<y>\d{4})
             "
-            ).unwrap();
+            )
+            .unwrap();
             static ref DATE_BE: Regex = Regex::new(
                 r"(?x)
                 (^|\s)
@@ -100,7 +101,8 @@ impl str::FromStr for Release {
                     )?
                 )?
             "
-            ).unwrap();
+            )
+            .unwrap();
         }
 
         DATE_BE
@@ -123,7 +125,8 @@ impl str::FromStr for Release {
                         _ => None,
                     });
                 y.map(|y| Release::new(y, m, d))
-            }).map(Ok)
+            })
+            .map(Ok)
             .unwrap_or(Err(ParseError::Unmatched))
     }
 }

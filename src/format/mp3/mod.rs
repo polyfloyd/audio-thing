@@ -1,12 +1,12 @@
 use crate::audio::*;
 use crate::format;
 use id3;
+use lazy_static::lazy_static;
 use liblame_sys::*;
+use log::*;
 use regex::bytes;
 use sample;
 use std::*;
-use log::*;
-use lazy_static::lazy_static;
 
 mod index;
 use self::index::FrameIndex;
@@ -153,7 +153,8 @@ where
                     next_sample: 0,
                     samples_available: init.decode_count,
                     _f: marker::PhantomData,
-                })).into()
+                }))
+                .into()
             };
         }
         Ok((
@@ -190,7 +191,8 @@ unsafe impl<F, R> Send for Decoder<F, R>
 where
     F: sample::Frame<Sample = i16>,
     R: io::Read + io::Seek + 'static,
-{}
+{
+}
 
 impl<F, R> iter::Iterator for Decoder<F, R>
 where
@@ -297,7 +299,8 @@ impl<F, R> Seek for Decoder<F, R>
 where
     F: sample::Frame<Sample = i16>,
     R: io::Read + io::Seek + 'static,
-{}
+{
+}
 
 impl<F, R> Drop for Decoder<F, R>
 where

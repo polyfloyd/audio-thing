@@ -9,7 +9,9 @@ fn main() {
         .header("/usr/include/FLAC/all.h")
         .derive_debug(true)
         .rustified_enum("^FLAC__.+$")
-        .generate().unwrap()
-        .write_to_file(Path::new(&out_dir).join("libflac.rs")).unwrap();
+        .generate()
+        .unwrap()
+        .write_to_file(Path::new(&out_dir).join("libflac.rs"))
+        .unwrap();
     println!("cargo:rustc-link-lib=FLAC");
 }

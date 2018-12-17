@@ -282,7 +282,8 @@ impl FrameIndex {
                 } else {
                     cmp::Ordering::Equal
                 }
-            }).ok()
+            })
+            .ok()
     }
 }
 

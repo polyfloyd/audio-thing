@@ -9,8 +9,10 @@ fn main() {
         .header("include/libpulse.h")
         .derive_debug(true)
         .rustified_enum("^pa_.+$")
-        .generate().unwrap()
-        .write_to_file(Path::new(&out_dir).join("libpulse.rs")).unwrap();
+        .generate()
+        .unwrap()
+        .write_to_file(Path::new(&out_dir).join("libpulse.rs"))
+        .unwrap();
     println!("cargo:rustc-link-lib=pulse");
     println!("cargo:rustc-link-lib=pulse-simple");
 }

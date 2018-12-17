@@ -1,10 +1,10 @@
 use crate::audio::*;
 use crate::library;
+use log::*;
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, Weak};
 use std::*;
-use log::*;
 
 pub mod output;
 pub mod playback;
@@ -226,7 +226,8 @@ impl library::PlaylistMut for Player {
                     .get(i)
                     .cloned()
                     .ok_or(library::PlaylistError::IndexOutOfBounds)
-            }).collect::<Result<Vec<_>, _>>()?;
+            })
+            .collect::<Result<Vec<_>, _>>()?;
         if self.queue.len() != new_queue.len() {
             return Err(Box::from(library::PlaylistError::MoveDuplicateIndices));
         }

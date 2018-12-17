@@ -1,5 +1,6 @@
 use crate::format;
 use crate::library::{self, Library, Track, TrackInfo};
+use log::*;
 use notify::{self, Watcher};
 use rusqlite as sqlite;
 use std::borrow::Cow;
@@ -7,7 +8,6 @@ use std::hash::{Hash, Hasher};
 use std::sync::mpsc;
 use std::*;
 use xdg;
-use log::*;
 
 mod playlist;
 mod track;
@@ -255,7 +255,8 @@ impl library::Library for Filesystem {
                     track.genres.push(genre?);
                 }
                 Ok(track)
-            })?.collect(); // TODO: Stream results instead of collecting.
+            })?
+            .collect(); // TODO: Stream results instead of collecting.
         Ok(Box::from(tracks?.into_iter().map(
             |t| -> sync::Arc<library::Track> { sync::Arc::new(t) },
         )))
@@ -559,17 +560,20 @@ mod tests {
         let exists = db
             .query_row("SELECT file_exists(?1)", &[&file], |row| {
                 row.get::<_, bool>(0)
-            }).unwrap();
+            })
+            .unwrap();
         assert!(exists);
         let non_existing = db
             .query_row("SELECT file_exists('non_existing.file')", &[], |row| {
                 row.get::<_, bool>(0)
-            }).unwrap();
+            })
+            .unwrap();
         assert!(!non_existing);
         let not_a_file = db
             .query_row("SELECT file_exists('testdata')", &[], |row| {
                 row.get::<_, bool>(0)
-            }).unwrap();
+            })
+            .unwrap();
         assert!(!not_a_file);
     }
 
@@ -602,7 +606,8 @@ mod tests {
         let file = "01 - The B-Trees - Lucy in the Cloud with Sine Waves.flac";
         let pt = track_from_path(
             &path::Path::new("testdata/Various Artists - Dark Sine of the Moon").join(file),
-        ).unwrap();
+        )
+        .unwrap();
         let db = fs.track_by_path(path::Path::new(file)).unwrap().unwrap();
         assert_eq!(pt.title(), db.title());
         assert_eq!(pt.artists(), db.artists());
@@ -638,7 +643,8 @@ mod tests {
             VALUES ('/home/user/non_existing.file', 1337, 42, 'Dummy')
         "#,
             &[],
-        ).unwrap();
+        )
+        .unwrap();
         assert_eq!(
             1,
             db.query_row("SELECT COUNT(*) FROM \"track\"", &[], |row| row.get(0))

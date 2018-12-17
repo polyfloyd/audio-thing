@@ -60,7 +60,8 @@ where
         "source",
         rate,
         pa_stream_direction::PA_STREAM_RECORD,
-    ).map(|conn| Source { conn, rate })
+    )
+    .map(|conn| Source { conn, rate })
 }
 
 pub struct Sink<F: sample::Frame> {
@@ -121,7 +122,8 @@ where
         stream_name,
         rate,
         pa_stream_direction::PA_STREAM_PLAYBACK,
-    ).map(|c| Sink {
+    )
+    .map(|c| Sink {
         conn: io::BufWriter::new(c),
         rate,
     })

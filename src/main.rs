@@ -50,7 +50,8 @@ fn main() {
                         i,
                         track.artists().get(0).unwrap_or(&"?".to_string()),
                         track.title()
-                    ).unwrap();
+                    )
+                    .unwrap();
                 }
                 let track = lines
                     .next()
@@ -108,14 +109,16 @@ fn main() {
                         out,
                         "  artists: {}",
                         info.artists().get(0).unwrap_or(&"?".to_string())
-                    ).unwrap();
+                    )
+                    .unwrap();
                     writeln!(
                         out,
                         "  rating:  {}",
                         info.rating()
                             .map(|r| format!("{}", r))
                             .unwrap_or_else(|| "-".to_string())
-                    ).unwrap();
+                    )
+                    .unwrap();
                 }
                 if let Some(&mut (ref audio, ref mut pb, ref info)) =
                     managed_id.as_ref().and_then(|id| p.playing.get_mut(id))
@@ -133,13 +136,15 @@ fn main() {
                         "position: {}/{}",
                         format_duraton(&pb.position_time()),
                         duration
-                    ).unwrap();
+                    )
+                    .unwrap();
                     writeln!(out, "tempo:    {}", pb.tempo()).unwrap();
                     writeln!(
                         out,
                         "latency:  {}ns",
                         pb.stream.latency().unwrap().subsec_nanos()
-                    ).unwrap();
+                    )
+                    .unwrap();
                 }
             }
 
@@ -157,7 +162,8 @@ fn main() {
                                 "{} - {}",
                                 track.artists().get(0).unwrap_or(&"?".to_string()),
                                 track.title()
-                            ).unwrap();
+                            )
+                            .unwrap();
                         }
                         library::Audio::Stream(_) => unimplemented!(),
                     };

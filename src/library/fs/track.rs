@@ -2,10 +2,10 @@ use super::Error;
 use crate::audio::*;
 use crate::format;
 use crate::library;
+use lazy_static::lazy_static;
 use regex::Regex;
 use std::borrow::Cow;
 use std::*;
-use lazy_static::lazy_static;
 
 pub struct RawTrack {
     pub path: String,
@@ -143,7 +143,8 @@ where
                     .and_then(|cap| cap.get(1))
                     .map(|m| vec![m.as_str().into()])
                     .unwrap_or_else(Vec::new)
-            }).into()
+            })
+            .into()
     }
 
     fn remixers(&self) -> Cow<[String]> {
@@ -214,7 +215,8 @@ where
                 data.iter()
                     .position(|b| *b == 0)
                     .and_then(|i| data.get(i + 1))
-            }).and_then(|num| match *num {
+            })
+            .and_then(|num| match *num {
                 0 => None,
                 1...31 => Some(1),
                 32...95 => Some(2),
@@ -262,8 +264,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use id3;
     use crate::library::TrackInfo;
+    use id3;
 
     #[test]
     fn test_tags() {

@@ -40,7 +40,8 @@ where
                 Ok(None) => None,
                 Err(err) => Some(Err(err)),
             }
-        }).collect()
+        })
+        .collect()
 }
 
 #[derive(Clone)]
@@ -187,7 +188,8 @@ pub trait PlaylistMut: Playlist {
         } else {
             // Target position is inside the range to be moved.
             return Ok(());
-        }.cloned()
+        }
+        .cloned()
         .collect();
         self.move_all(contents.as_slice())?;
         Ok(())
@@ -211,7 +213,8 @@ pub trait PlaylistMut: Playlist {
                     return Err(PlaylistError::IndexOutOfBounds);
                 }
                 Ok(&orig[from[i]])
-            }).collect::<Result<Vec<_>, _>>();
+            })
+            .collect::<Result<Vec<_>, _>>();
         let contents = contents?;
         if contents.len() != orig.len() {
             return Err(Box::from(PlaylistError::MoveDuplicateIndices));

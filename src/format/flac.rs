@@ -2,11 +2,11 @@ use crate::audio::*;
 use crate::format;
 use id3;
 use libflac_sys::*;
+use log::*;
 use sample::{self, I24};
 use std::borrow::Cow;
 use std::ops::DerefMut;
 use std::*;
-use log::*;
 
 pub const MAGIC: &[u8] = b"fLaC";
 
@@ -111,7 +111,8 @@ where
                     abs_position: 0,
                     sample_rate: sample_rate,
                     _f: marker::PhantomData,
-                })).into()
+                }))
+                .into()
             };
         }
         let meta = cb_data.meta.take().unwrap();
@@ -234,14 +235,16 @@ where
     F: sample::Frame,
     F::Sample: DecodeSample,
     R: io::Read + io::Seek + SeekExt,
-{}
+{
+}
 
 unsafe impl<F, R> Send for Decoder<F, R>
 where
     F: sample::Frame,
     F::Sample: DecodeSample,
     R: io::Read + io::Seek + SeekExt,
-{}
+{
+}
 
 impl<F, R> Drop for Decoder<F, R>
 where
@@ -310,7 +313,8 @@ where
             (0..fr.header.blocksize)
                 .map(|i| *chan_base_ptr.offset(i as isize))
                 .collect()
-        }).collect();
+        })
+        .collect();
     data.current_block = Some(Block { data: block_data });
     FLAC__StreamDecoderWriteStatus::FLAC__STREAM_DECODER_WRITE_STATUS_CONTINUE
 }
@@ -463,7 +467,8 @@ unsafe extern "C" fn metadata_cb<R>(
                                 4 => Some(196),
                                 5 => Some(255),
                                 _ => None,
-                            }).map(|n| {
+                            })
+                            .map(|n| {
                                 let mut a = "Windows Media Player 9 Series\0_\0\0\0\0"
                                     .to_string()
                                     .into_bytes();

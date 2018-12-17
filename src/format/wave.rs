@@ -1,12 +1,12 @@
 use crate::audio::*;
-use byteorder::{BigEndian, ByteOrder, LittleEndian};
 use crate::format;
+use byteorder::{BigEndian, ByteOrder, LittleEndian};
 use id3;
+use lazy_static::lazy_static;
 use log::*;
 use regex::bytes;
 use sample::{self, I24};
 use std::*;
-use lazy_static::lazy_static;
 
 pub fn magic() -> &'static bytes::Regex {
     lazy_static! {
@@ -41,7 +41,8 @@ where
             b"F" => Some(Endianness::Little),
             b"X" => Some(Endianness::Big),
             _ => None,
-        }).ok_or(Error::FormatError)?;
+        })
+        .ok_or(Error::FormatError)?;
 
     struct FmtChunk {
         audio_format: u16,
@@ -139,18 +140,25 @@ where
                 next_sample: 0,
                 ph_f: marker::PhantomData,
                 ph_b: marker::PhantomData,
-            })).into()
+            }))
+            .into()
         };
     }
     Ok((
         match (fmt.num_channels, fmt.sample_size, audio_format, endianness) {
             (1, 8, Format::Int, Endianness::Little) => dyn_type!(dynam::Seek::MonoU8, LittleEndian),
-            (1, 16, Format::Int, Endianness::Little) => dyn_type!(dynam::Seek::MonoI16, LittleEndian),
-            (1, 24, Format::Int, Endianness::Little) => dyn_type!(dynam::Seek::MonoI24, LittleEndian),
+            (1, 16, Format::Int, Endianness::Little) => {
+                dyn_type!(dynam::Seek::MonoI16, LittleEndian)
+            }
+            (1, 24, Format::Int, Endianness::Little) => {
+                dyn_type!(dynam::Seek::MonoI24, LittleEndian)
+            }
             (1, 32, Format::Float, Endianness::Little) => {
                 dyn_type!(dynam::Seek::MonoF32, LittleEndian)
             }
-            (2, 8, Format::Int, Endianness::Little) => dyn_type!(dynam::Seek::StereoU8, LittleEndian),
+            (2, 8, Format::Int, Endianness::Little) => {
+                dyn_type!(dynam::Seek::StereoU8, LittleEndian)
+            }
             (2, 16, Format::Int, Endianness::Little) => {
                 dyn_type!(dynam::Seek::StereoI16, LittleEndian)
             }
@@ -287,7 +295,8 @@ where
     F: sample::Frame,
     F::Sample: DecodeSample<B>,
     B: ByteOrder,
-{}
+{
+}
 
 trait DecodeSample<B>: sample::Sample
 where

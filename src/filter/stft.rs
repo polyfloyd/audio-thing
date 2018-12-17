@@ -69,18 +69,17 @@ where
                 dft::transform(block, &self.fft_plan);
             }
             assert_eq!(O::n_channels(), blocks.len());
-            assert!(
-                blocks
-                    .iter()
-                    .all(|block| block.len() == self.stft.window_size())
-            );
+            assert!(blocks
+                .iter()
+                .all(|block| block.len() == self.stft.window_size()));
 
             let next_window = (0..self.stft.window_size())
                 .map(|n| {
                     O::Float::from_fn(|ch| {
                         <O::Sample as sample::Sample>::Float::from_sample(blocks[ch][n])
                     })
-                }).collect();
+                })
+                .collect();
             self.windows.push_back(next_window);
             self.windows.pop_front();
             // Drop the overlapping part of the previous frame.
@@ -183,7 +182,8 @@ where
                     .collect();
                 dft::transform(&mut block, &self.fft_plan);
                 block
-            }).collect();
+            })
+            .collect();
         assert_eq!(S::Item::n_channels(), blocks.len());
         Some(blocks)
     }
@@ -217,4 +217,5 @@ where
     T: audio::Source,
     T::Item: sample::Frame,
     <T::Item as sample::Frame>::Sample: sample::ToSample<f64>,
-{}
+{
+}

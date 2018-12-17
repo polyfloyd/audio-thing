@@ -8,7 +8,9 @@ fn main() {
     bindgen::builder()
         .header("/usr/include/lame/lame.h")
         .derive_debug(true)
-        .generate().unwrap()
-        .write_to_file(Path::new(&out_dir).join("liblame.rs")).unwrap();
+        .generate()
+        .unwrap()
+        .write_to_file(Path::new(&out_dir).join("liblame.rs"))
+        .unwrap();
     println!("cargo:rustc-link-lib=mp3lame");
 }
