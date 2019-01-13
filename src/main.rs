@@ -16,11 +16,7 @@ mod player;
 mod pulse;
 
 fn main() {
-    if cfg!(release) || env::var("LOG").is_ok() {
-        badlog::init_from_env("LOG");
-    } else {
-        badlog::init(Some("debug"));
-    }
+    env_logger::init();
 
     let fs = sync::Arc::new(library::fs::Filesystem::new(path::Path::new("testdata")).unwrap());
     let libs: Vec<sync::Arc<library::Library>> = vec![fs.clone()];

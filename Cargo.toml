@@ -12,13 +12,13 @@ opt-level = 3
 unstable = []
 
 [dependencies]
-badlog = "1.1.1"
 byteorder = "1.2.4"
 derive-error = "0.0.4"
 dft = "0.5.5"
+env_logger = "0.6"
 id3 = "0.2.4"
 lazy_static = "1.1.0"
-log = "0.4.3"
+log = "0.4"
 notify = "4.0.4"
 rand = "0.5.5"
 regex = "1.0.2"
